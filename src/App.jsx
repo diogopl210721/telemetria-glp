@@ -390,8 +390,8 @@ function LiveOverview({ counts, pulseHistory, total, running, setRunning, speedS
   const trendData = pulseHistory.map((p) => ({ ...p, risco: p.critico + p.atencao + p.falha }));
 
   return (
-    <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "18px 20px", marginBottom: 26 }}>
-      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14 }}>
+    <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 20 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Activity size={16} color={COLORS.blue} />
           <span style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700 }}>Panorama de todas as bases</span>
@@ -409,8 +409,8 @@ function LiveOverview({ counts, pulseHistory, total, running, setRunning, speedS
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 24, alignItems: "center" }}>
-        <div style={{ position: "relative", width: 148, height: 148, flexShrink: 0 }}>
+      <div className="tg-overview-row" style={{ display: "flex", flexWrap: "wrap", gap: 20, alignItems: "flex-start" }}>
+        <div style={{ position: "relative", width: 148, height: 148, flexShrink: 0, margin: "0 auto" }}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie data={donutData} dataKey="value" nameKey="key" innerRadius={46} outerRadius={70} paddingAngle={3} stroke="none" isAnimationActive={false}>
@@ -424,7 +424,7 @@ function LiveOverview({ counts, pulseHistory, total, running, setRunning, speedS
           </div>
         </div>
 
-        <div style={{ minWidth: 0 }}>
+        <div style={{ flex: "1 1 240px", minWidth: 220 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
             {["critico", "falha", "atencao", "ok"].map((s) => {
               const meta = STATUS_META[s];
@@ -438,7 +438,7 @@ function LiveOverview({ counts, pulseHistory, total, running, setRunning, speedS
             })}
           </div>
           <div style={{ fontSize: 10.5, color: COLORS.faint, marginBottom: 4 }}>tendência de clientes em risco (crítico + atenção + sem sinal)</div>
-          <div style={{ height: 64 }}>
+          <div style={{ height: 64, width: "100%" }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trendData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                 <defs>
@@ -467,8 +467,8 @@ function BaseSelectScreen({ enrichedAll, onPick, liveProps }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.blue, fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: 1, marginBottom: 8 }}>
         <Radio size={13} /> TELEMETRIA GLP
       </div>
-      <h1 style={{ fontFamily: "var(--font-display)", fontSize: 30, fontWeight: 700, margin: "0 0 6px" }}>Qual base você quer acompanhar?</h1>
-      <p style={{ color: COLORS.muted, fontSize: 14, marginBottom: 22 }}>Selecione a base para abrir o painel de indicadores.</p>
+      <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, margin: "0 0 4px", color: COLORS.text }}>Qual base você quer acompanhar?</h1>
+      <p style={{ color: COLORS.muted, fontSize: 13.5, marginBottom: 16 }}>Selecione a base para abrir o painel de indicadores.</p>
 
       <LiveOverview {...liveProps} />
 

@@ -132,12 +132,17 @@ function generateClients() {
         const frequencia = FREQUENCIAS[Math.floor(rng() * FREQUENCIAS.length)];
         const diaSemana = DIAS_SEMANA[Math.floor(rng() * DIAS_SEMANA.length)];
 
+        let history = genSeed(cfg, rng);
+        if (behavior === "falha_sinal" && rng() < 0.55) {
+          history = history.slice(0, -(2 + Math.floor(rng() * 3))); // já está sem sinal desde o carregamento
+        }
+
         clients.push({
           id: `${base.id}-${cidade}-${i}`.replace(/\s+/g, "_"),
           nome, codigo, baseId: base.id, baseNome: base.nome, gerente: base.gerente,
           cidade, uf: base.uf, endereco: `${rua}, ${numero} - ${bairro} - ${cidade}/${base.uf}`,
           numB190, capacidadeKg, seedAbastecimento, frequencia, diaSemana,
-          config: cfg, history: genSeed(cfg, rng),
+          config: cfg, history,
         });
         idx++;
       }
@@ -380,18 +385,17 @@ function TopBar({ title, subtitle, onBack, running, setRunning, speedSec, setSpe
 /* ---------------------------------------------------------------------
    PAINEL AO VIVO — visão nacional (todas as bases), donut + tendência
 --------------------------------------------------------------------- */
-function LiveOverview({ counts, pulseHistory, total, running, setRunning, speedSec, setSpeedSec, globalTick }) {
+function LiveOverview({ counts, total, running, setRunning, speedSec, setSpeedSec, globalTick }) {
   const donutData = [
     { key: "critico", value: counts.critico },
     { key: "falha", value: counts.falha },
     { key: "atencao", value: counts.atencao },
     { key: "ok", value: counts.ok },
   ];
-  const trendData = pulseHistory.map((p) => ({ ...p, risco: p.critico + p.atencao + p.falha }));
 
   return (
     <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 20 }}>
-      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 12 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Activity size={16} color={COLORS.blue} />
           <span style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700 }}>Panorama de todas as bases</span>
@@ -409,7 +413,7 @@ function LiveOverview({ counts, pulseHistory, total, running, setRunning, speedS
         </div>
       </div>
 
-      <div className="tg-overview-row" style={{ display: "flex", flexWrap: "wrap", gap: 20, alignItems: "flex-start" }}>
+      <div className="tg-overview-row" style={{ display: "flex", flexWrap: "wrap", gap: 20, alignItems: "center" }}>
         <div style={{ position: "relative", width: 148, height: 148, flexShrink: 0, margin: "0 auto" }}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -424,34 +428,19 @@ function LiveOverview({ counts, pulseHistory, total, running, setRunning, speedS
           </div>
         </div>
 
-        <div style={{ flex: "1 1 240px", minWidth: 220 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
-            {["critico", "falha", "atencao", "ok"].map((s) => {
-              const meta = STATUS_META[s];
-              return (
-                <div key={s} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}>
-                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: meta.color, display: "inline-block" }} />
-                  <span style={{ color: COLORS.muted }}>{meta.label}</span>
-                  <span style={{ fontWeight: 700, fontFamily: "var(--font-mono)" }}>{counts[s]}</span>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8, flex: "1 1 260px", minWidth: 240 }}>
+          {["critico", "falha", "atencao", "ok"].map((s) => {
+            const meta = STATUS_META[s], Icon = meta.icon;
+            return (
+              <div key={s} style={{ background: meta.bg, border: `1px solid ${meta.color}33`, borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 10.5, color: meta.color, fontWeight: 600, letterSpacing: 0.3 }}>{meta.label.toUpperCase()}</div>
+                  <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: COLORS.text }}>{counts[s]}</div>
                 </div>
-              );
-            })}
-          </div>
-          <div style={{ fontSize: 10.5, color: COLORS.faint, marginBottom: 4 }}>tendência de clientes em risco (crítico + atenção + sem sinal)</div>
-          <div style={{ height: 64, width: "100%" }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={trendData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="fill-risco" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={COLORS.red} stopOpacity={0.4} />
-                    <stop offset="100%" stopColor={COLORS.red} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <Tooltip contentStyle={{ background: COLORS.panelAlt, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 11 }} labelStyle={{ color: COLORS.muted }} formatter={(v) => [v, "em risco"]} />
-                <Area type="monotone" dataKey="risco" stroke={COLORS.red} strokeWidth={2} fill="url(#fill-risco)" isAnimationActive={false} dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
+                <Icon size={18} color={meta.color} />
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -797,14 +786,6 @@ export default function TelemetriaSimulador() {
     return b;
   }, [enrichedAll]);
 
-  const [pulseHistory, setPulseHistory] = useState([]);
-  useEffect(() => {
-    setPulseHistory((prev) => {
-      if (prev.length && prev[prev.length - 1].tick === globalTick) return prev;
-      return [...prev, { tick: globalTick, label: formatTickLabel(globalTick), ...globalCounts }].slice(-40);
-    });
-  }, [globalTick, globalCounts]);
-
   const base = BASES.find((b) => b.id === baseId) || null;
   const baseClients = useMemo(() => (base ? enrichedAll.filter((c) => c.baseId === base.id) : []), [base, enrichedAll]);
   const scopeClients = useMemo(() => (city === "all" ? baseClients : baseClients.filter((c) => c.cidade === city)), [baseClients, city]);
@@ -841,7 +822,7 @@ export default function TelemetriaSimulador() {
         <BaseSelectScreen
           enrichedAll={enrichedAll}
           onPick={(id) => { setBaseId(id); setCity("all"); setStatusFilter(null); setView("dashboard"); }}
-          liveProps={{ counts: globalCounts, pulseHistory, total: enrichedAll.length, running, setRunning, speedSec, setSpeedSec, globalTick }}
+          liveProps={{ counts: globalCounts, total: enrichedAll.length, running, setRunning, speedSec, setSpeedSec, globalTick }}
         />
       )}
 

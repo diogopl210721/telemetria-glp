@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ReferenceLine, ResponsiveContainer, PieChart, Pie, Cell, AreaChart,
+  ReferenceLine, ResponsiveContainer,
 } from "recharts";
 import {
   Play, Pause, AlertTriangle, AlertOctagon, CheckCircle2, WifiOff,
@@ -386,13 +386,6 @@ function TopBar({ title, subtitle, onBack, running, setRunning, speedSec, setSpe
    PAINEL AO VIVO — visão nacional (todas as bases), donut + tendência
 --------------------------------------------------------------------- */
 function LiveOverview({ counts, total, running, setRunning, speedSec, setSpeedSec, globalTick }) {
-  const donutData = [
-    { key: "critico", value: counts.critico },
-    { key: "falha", value: counts.falha },
-    { key: "atencao", value: counts.atencao },
-    { key: "ok", value: counts.ok },
-  ];
-
   return (
     <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 20 }}>
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14 }}>
@@ -413,19 +406,10 @@ function LiveOverview({ counts, total, running, setRunning, speedSec, setSpeedSe
         </div>
       </div>
 
-      <div className="tg-overview-row" style={{ display: "flex", flexWrap: "wrap", gap: 20, alignItems: "center" }}>
-        <div style={{ position: "relative", width: 148, height: 148, flexShrink: 0, margin: "0 auto" }}>
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={donutData} dataKey="value" nameKey="key" innerRadius={46} outerRadius={70} paddingAngle={3} stroke="none" isAnimationActive={false}>
-                {donutData.map((d) => <Cell key={d.key} fill={STATUS_META[d.key].color} />)}
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
-          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-            <div style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 700 }}>{total}</div>
-            <div style={{ fontSize: 9.5, color: COLORS.faint, letterSpacing: 0.3 }}>CLIENTES</div>
-          </div>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, marginBottom: 12 }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontFamily: "var(--font-display)", fontSize: 30, fontWeight: 700 }}>{total}</div>
+          <div style={{ fontSize: 9.5, color: COLORS.faint, letterSpacing: 0.3 }}>CLIENTES</div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8, flex: "1 1 260px", minWidth: 240 }}>

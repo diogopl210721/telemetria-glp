@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   ComposedChart, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ReferenceLine, ResponsiveContainer,
+  ReferenceLine, ResponsiveContainer, PieChart, Pie, Cell, AreaChart,
 } from "recharts";
 import {
   Play, Pause, AlertTriangle, AlertOctagon, CheckCircle2, WifiOff,
   Truck, ChevronDown, ChevronRight, ChevronLeft, Radio, Gauge as GaugeIcon,
-  SkipForward, FileSpreadsheet, MapPin, Building2, Users, Fuel, Hash, TrendingDown,
+  SkipForward, FileSpreadsheet, MapPin, Building2, Users, Fuel, Hash, TrendingDown, Activity,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -360,16 +360,100 @@ function TopBar({ title, subtitle, onBack, running, setRunning, speedSec, setSpe
 }
 
 /* ---------------------------------------------------------------------
+   PAINEL AO VIVO — visão nacional (todas as bases), donut + tendência
+--------------------------------------------------------------------- */
+function LiveOverview({ counts, pulseHistory, total, running, setRunning, speedSec, setSpeedSec, globalTick }) {
+  const donutData = [
+    { key: "critico", value: counts.critico },
+    { key: "falha", value: counts.falha },
+    { key: "atencao", value: counts.atencao },
+    { key: "ok", value: counts.ok },
+  ];
+  const trendData = pulseHistory.map((p) => ({ ...p, risco: p.critico + p.atencao + p.falha }));
+
+  return (
+    <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "18px 20px", marginBottom: 26 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Activity size={16} color={COLORS.blue} />
+          <span style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700 }}>Panorama de todas as bases</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)", fontSize: 11 }}>
+            {running ? <span className="tg-livedot" /> : <span style={{ width: 8, height: 8, borderRadius: "50%", background: COLORS.faint, display: "inline-block" }} />}
+            <span style={{ color: running ? COLORS.green : COLORS.muted }}>{running ? "AO VIVO" : "PARADO"}</span>
+            <span style={{ color: COLORS.faint }}>· {formatTickLabel(globalTick)}</span>
+          </div>
+          <button className="tg-btn" onClick={() => setRunning((r) => !r)} style={{ display: "flex", alignItems: "center", gap: 5, background: running ? COLORS.redSoft : COLORS.greenSoft, color: running ? COLORS.red : COLORS.green, border: "none", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            {running ? <Pause size={12} /> : <Play size={12} />} {running ? "Parar" : "Iniciar"}
+          </button>
+          <input className="tg-slider" type="range" min={1} max={10} step={0.5} value={speedSec} onChange={(e) => setSpeedSec(+e.target.value)} style={{ width: 70 }} title={`${speedSec}s / leitura`} />
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 24, alignItems: "center" }}>
+        <div style={{ position: "relative", width: 148, height: 148, flexShrink: 0 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={donutData} dataKey="value" nameKey="key" innerRadius={46} outerRadius={70} paddingAngle={3} stroke="none" isAnimationActive={false}>
+                {donutData.map((d) => <Cell key={d.key} fill={STATUS_META[d.key].color} />)}
+              </Pie>
+            </PieChart>
+          </ResponsiveContainer>
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+            <div style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 700 }}>{total}</div>
+            <div style={{ fontSize: 9.5, color: COLORS.faint, letterSpacing: 0.3 }}>CLIENTES</div>
+          </div>
+        </div>
+
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+            {["critico", "falha", "atencao", "ok"].map((s) => {
+              const meta = STATUS_META[s];
+              return (
+                <div key={s} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: meta.color, display: "inline-block" }} />
+                  <span style={{ color: COLORS.muted }}>{meta.label}</span>
+                  <span style={{ fontWeight: 700, fontFamily: "var(--font-mono)" }}>{counts[s]}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ fontSize: 10.5, color: COLORS.faint, marginBottom: 4 }}>tendência de clientes em risco (crítico + atenção + sem sinal)</div>
+          <div style={{ height: 64 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={trendData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="fill-risco" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={COLORS.red} stopOpacity={0.4} />
+                    <stop offset="100%" stopColor={COLORS.red} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Tooltip contentStyle={{ background: COLORS.panelAlt, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 11 }} labelStyle={{ color: COLORS.muted }} formatter={(v) => [v, "em risco"]} />
+                <Area type="monotone" dataKey="risco" stroke={COLORS.red} strokeWidth={2} fill="url(#fill-risco)" isAnimationActive={false} dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------
    TELA 1 — SELEÇÃO DE BASE
 --------------------------------------------------------------------- */
-function BaseSelectScreen({ enrichedAll, onPick }) {
+function BaseSelectScreen({ enrichedAll, onPick, liveProps }) {
   return (
     <div style={{ maxWidth: 900, margin: "40px auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.blue, fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: 1, marginBottom: 8 }}>
         <Radio size={13} /> TELEMETRIA GLP
       </div>
       <h1 style={{ fontFamily: "var(--font-display)", fontSize: 30, fontWeight: 700, margin: "0 0 6px" }}>Qual base você quer acompanhar?</h1>
-      <p style={{ color: COLORS.muted, fontSize: 14, marginBottom: 26 }}>Selecione a base para abrir o painel de indicadores.</p>
+      <p style={{ color: COLORS.muted, fontSize: 14, marginBottom: 22 }}>Selecione a base para abrir o painel de indicadores.</p>
+
+      <LiveOverview {...liveProps} />
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14 }}>
         {BASES.map((base) => {
           const clientes = enrichedAll.filter((c) => c.baseId === base.id);
@@ -660,6 +744,20 @@ export default function TelemetriaSimulador() {
 
   const enrichedAll = useMemo(() => clients.map((c) => ({ ...c, metrics: computeMetrics(c, globalTick) })), [clients, globalTick]);
 
+  const globalCounts = useMemo(() => {
+    const b = { ok: 0, atencao: 0, critico: 0, falha: 0 };
+    enrichedAll.forEach((c) => b[c.metrics.status]++);
+    return b;
+  }, [enrichedAll]);
+
+  const [pulseHistory, setPulseHistory] = useState([]);
+  useEffect(() => {
+    setPulseHistory((prev) => {
+      if (prev.length && prev[prev.length - 1].tick === globalTick) return prev;
+      return [...prev, { tick: globalTick, label: formatTickLabel(globalTick), ...globalCounts }].slice(-40);
+    });
+  }, [globalTick, globalCounts]);
+
   const base = BASES.find((b) => b.id === baseId) || null;
   const baseClients = useMemo(() => (base ? enrichedAll.filter((c) => c.baseId === base.id) : []), [base, enrichedAll]);
   const scopeClients = useMemo(() => (city === "all" ? baseClients : baseClients.filter((c) => c.cidade === city)), [baseClients, city]);
@@ -692,7 +790,11 @@ export default function TelemetriaSimulador() {
       <GlobalStyle />
 
       {view === "baseSelect" && (
-        <BaseSelectScreen enrichedAll={enrichedAll} onPick={(id) => { setBaseId(id); setCity("all"); setStatusFilter(null); setView("dashboard"); }} />
+        <BaseSelectScreen
+          enrichedAll={enrichedAll}
+          onPick={(id) => { setBaseId(id); setCity("all"); setStatusFilter(null); setView("dashboard"); }}
+          liveProps={{ counts: globalCounts, pulseHistory, total: enrichedAll.length, running, setRunning, speedSec, setSpeedSec, globalTick }}
+        />
       )}
 
       {view === "dashboard" && base && (

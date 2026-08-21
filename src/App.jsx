@@ -6,7 +6,7 @@ import {
 import {
   Play, Pause, AlertTriangle, AlertOctagon, CheckCircle2, WifiOff,
   Truck, ChevronDown, ChevronRight, ChevronLeft, Radio, Gauge as GaugeIcon,
-  SkipForward, FileSpreadsheet, MapPin, Building2, Users, Fuel, Hash, TrendingDown, Activity,
+  SkipForward, FileSpreadsheet, MapPin, Building2, Users, Fuel, Hash, TrendingDown, Activity, CalendarClock,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 
@@ -69,6 +69,14 @@ const BEHAVIOR_PATTERN = ["normal", "normal", "normal", "anomalia_alta", "normal
   "mal_dimensionado", "sensor_travado", "normal", "falha_sinal", "recem_abastecido"];
 const NUMB190_PATTERN = [1, 2, 3, 4, 5, 6, 2, 3, 1, 4];
 
+const FREQUENCIAS = ["semanal", "15dias", "21dias", "42dias", "mensal", "bimestral", "trimestral", "semestral", "anual"];
+const FREQ_LABELS = {
+  semanal: "Semanal", "15dias": "A cada 15 dias", "21dias": "A cada 21 dias", "42dias": "A cada 42 dias",
+  mensal: "Mensal", bimestral: "Bimestral", trimestral: "Trimestral", semestral: "Semestral", anual: "Anual",
+};
+const FREQ_DIAS = { semanal: 7, "15dias": 15, "21dias": 21, "42dias": 42, mensal: 30, bimestral: 60, trimestral: 90, semestral: 180, anual: 365 };
+const DIAS_SEMANA = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+
 /* ---------------------------------------------------------------------
    GERAÇÃO DE CLIENTES
 --------------------------------------------------------------------- */
@@ -119,14 +127,16 @@ function generateClients() {
         const seedAbastecimento = {
           diasAtras: 3 + Math.floor(rng() * 10),
           antesPct: +(14 + rng() * 10).toFixed(1),
-          depoisPct: +(88 + rng() * 8).toFixed(1),
+          depoisPct: +(74 + rng() * 6).toFixed(1),
         };
+        const frequencia = FREQUENCIAS[Math.floor(rng() * FREQUENCIAS.length)];
+        const diaSemana = DIAS_SEMANA[Math.floor(rng() * DIAS_SEMANA.length)];
 
         clients.push({
           id: `${base.id}-${cidade}-${i}`.replace(/\s+/g, "_"),
           nome, codigo, baseId: base.id, baseNome: base.nome, gerente: base.gerente,
           cidade, uf: base.uf, endereco: `${rua}, ${numero} - ${bairro} - ${cidade}/${base.uf}`,
-          numB190, capacidadeKg, seedAbastecimento,
+          numB190, capacidadeKg, seedAbastecimento, frequencia, diaSemana,
           config: cfg, history: genSeed(cfg, rng),
         });
         idx++;
@@ -158,12 +168,12 @@ function advanceClient(client, newTick) {
     const rate = newTick >= cfg.anomalyStartTick ? cfg.baseRatePerTick * 2.5 : cfg.baseRatePerTick;
     nivel = last - rate + (Math.random() - 0.5) * 0.3;
   } else if (cfg.behavior === "recem_abastecido" && newTick === cfg.resupplyTick) {
-    nivel = 90 + Math.random() * 6;
+    nivel = 76 + Math.random() * 6; // caminhão chegou — nunca passa de ~80% (margem de vaporização)
   } else {
     nivel = last - cfg.baseRatePerTick + (Math.random() - 0.5) * 0.3;
   }
-  if (nivel <= 4 && cfg.behavior !== "sensor_travado") nivel = 90 + Math.random() * 6;
-  nivel = +Math.max(0, Math.min(100, nivel)).toFixed(1);
+  if (nivel <= 4 && cfg.behavior !== "sensor_travado") nivel = 76 + Math.random() * 6;
+  nivel = +Math.max(0, Math.min(82, nivel)).toFixed(1); // teto físico realista
   return { ...client, history: [...client.history, { tick: newTick, nivel }] };
 }
 
@@ -254,15 +264,23 @@ function describeArc(cx, cy, r, startAngle, endAngle) {
 }
 const angleForLevel = (level) => Math.max(0, Math.min(100, level)) * 1.8;
 
+const FULL_LEVEL = 80; // GLP nunca enche além disso — margem de vaporização
+
 function Gauge({ level, limite, size = 200 }) {
   const cx = size / 2, cy = size / 2, r = size / 2 - 14;
   const meta = level <= limite ? STATUS_META.critico : level <= limite + 15 ? STATUS_META.atencao : STATUS_META.ok;
   const needleEnd = polarToCartesian(cx, cy, r - 18, angleForLevel(level));
+  const fullTickInner = polarToCartesian(cx, cy, r - 7, angleForLevel(FULL_LEVEL));
+  const fullTickOuter = polarToCartesian(cx, cy, r + 7, angleForLevel(FULL_LEVEL));
+  const fullLabelPos = polarToCartesian(cx, cy, r + 18, angleForLevel(FULL_LEVEL));
   return (
-    <svg width={size} height={size / 1.7} viewBox={`0 0 ${size} ${size / 1.7 + 6}`}>
+    <svg width={size} height={size / 1.7 + 14} viewBox={`0 0 ${size} ${size / 1.7 + 20}`}>
       <path d={describeArc(cx, cy, r, angleForLevel(0), angleForLevel(limite))} stroke={COLORS.red} strokeWidth={12} fill="none" strokeLinecap="round" opacity={0.85} />
-      <path d={describeArc(cx, cy, r, angleForLevel(limite), angleForLevel(Math.min(100, limite + 15)))} stroke={COLORS.amber} strokeWidth={12} fill="none" opacity={0.85} />
-      <path d={describeArc(cx, cy, r, angleForLevel(Math.min(100, limite + 15)), angleForLevel(100))} stroke={COLORS.green} strokeWidth={12} fill="none" strokeLinecap="round" opacity={0.85} />
+      <path d={describeArc(cx, cy, r, angleForLevel(limite), angleForLevel(Math.min(FULL_LEVEL, limite + 15)))} stroke={COLORS.amber} strokeWidth={12} fill="none" opacity={0.85} />
+      <path d={describeArc(cx, cy, r, angleForLevel(Math.min(FULL_LEVEL, limite + 15)), angleForLevel(FULL_LEVEL))} stroke={COLORS.green} strokeWidth={12} fill="none" strokeLinecap="round" opacity={0.85} />
+      <path d={describeArc(cx, cy, r, angleForLevel(FULL_LEVEL), angleForLevel(100))} stroke={COLORS.faint} strokeWidth={12} fill="none" strokeLinecap="round" opacity={0.35} />
+      <line x1={fullTickInner.x} y1={fullTickInner.y} x2={fullTickOuter.x} y2={fullTickOuter.y} stroke={COLORS.text} strokeWidth={2} />
+      <text x={fullLabelPos.x} y={fullLabelPos.y} textAnchor="middle" fill={COLORS.muted} style={{ fontSize: 9, fontWeight: 600 }}>CHEIO</text>
       <line x1={cx} y1={cy} x2={needleEnd.x} y2={needleEnd.y} stroke={COLORS.text} strokeWidth={3} strokeLinecap="round" />
       <circle cx={cx} cy={cy} r={6} fill={COLORS.text} />
       <text x={cx} y={cy - 26} textAnchor="middle" fill={meta.color} style={{ fontSize: 30, fontWeight: 700, fontFamily: "var(--font-mono)" }}>{level.toFixed(1)}%</text>
@@ -654,8 +672,26 @@ function DetailScreen({ client, globalTick, onBack }) {
         <span style={{ display: "flex", alignItems: "center", gap: 4 }}><MapPin size={12} /> {client.endereco}</span>
         <span>Base {client.baseNome} · Gerente {client.gerente}</span>
       </div>
-      <div style={{ fontSize: 12, color: COLORS.faint, marginBottom: 18, display: "flex", alignItems: "center", gap: 5 }}>
-        <Fuel size={12} /> {client.numB190} × B-190 ({client.capacidadeKg} kg de capacidade)
+      <div style={{ fontSize: 12, color: COLORS.faint, marginBottom: 14, display: "flex", alignItems: "center", gap: 5 }}>
+        <Fuel size={12} /> {client.numB190} × B-190 ({client.capacidadeKg} kg de capacidade nominal · enche até ~80% por margem de vaporização)
+      </div>
+
+      <div style={{
+        display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 18,
+        background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "12px 16px",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <CalendarClock size={16} color={COLORS.blue} />
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 700 }}>{FREQ_LABELS[client.frequencia]} · {client.diaSemana}</div>
+            <div style={{ fontSize: 10.5, color: COLORS.faint }}>frequência de rota contratada para este cliente</div>
+          </div>
+        </div>
+        {isFinite(metrics.diasEstimados) && metrics.diasEstimados < FREQ_DIAS[client.frequencia] * 0.5 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 5, background: COLORS.amberSoft, color: COLORS.amber, padding: "4px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 600 }}>
+            <AlertTriangle size={12} /> projeção atual ({metrics.diasEstimados.toFixed(1)}d) bem abaixo do padrão contratado ({FREQ_DIAS[client.frequencia]}d)
+          </div>
+        )}
       </div>
 
       <div className="tg-detail-grid">
@@ -683,6 +719,7 @@ function DetailScreen({ client, globalTick, onBack }) {
                 <YAxis domain={[0, 100]} tick={{ fill: COLORS.faint, fontSize: 10 }} axisLine={false} tickLine={false} width={30} />
                 <Tooltip contentStyle={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 8, fontSize: 12 }} labelStyle={{ color: COLORS.muted }} />
                 <ReferenceLine y={client.config.limiteAprendido} stroke={COLORS.red} strokeDasharray="4 3" label={{ value: "limite", position: "insideTopRight", fill: COLORS.red, fontSize: 10 }} />
+                <ReferenceLine y={FULL_LEVEL} stroke={COLORS.muted} strokeDasharray="2 4" label={{ value: "cheio (80%)", position: "insideBottomRight", fill: COLORS.muted, fontSize: 10 }} />
                 <Area type="monotone" dataKey="nivel" stroke={meta.color} strokeWidth={2} fill={`url(#fill-${client.id})`} connectNulls dot={false} />
                 <Line type="monotone" dataKey="projecao" stroke={COLORS.muted} strokeWidth={1.6} strokeDasharray="4 4" dot={false} connectNulls />
               </ComposedChart>
@@ -779,6 +816,7 @@ export default function TelemetriaSimulador() {
     const resumoRows = exportScope.map((c) => ({
       Cliente: c.nome, "Código": c.codigo, Cidade: c.cidade, Base: c.baseNome, Gerente: c.gerente,
       "B-190": c.numB190, Endereço: c.endereco,
+      "Frequência de abastecimento": FREQ_LABELS[c.frequencia], "Dia da rota": c.diaSemana,
       Status: STATUS_META[c.metrics.status].label,
       "Nível atual (%)": c.metrics.semSinal ? null : c.metrics.nivelAtual,
       "Limite aprendido (%)": c.config.limiteAprendido,

@@ -593,11 +593,21 @@ function ListScreen({ base, city, statusFilter, setStatusFilter, list, onOpenCli
         {sorted.length === 0 && <div style={{ padding: 24, textAlign: "center", color: COLORS.faint, fontSize: 13 }}>Nenhum cliente neste filtro.</div>}
         {sorted.map((c) => {
           const meta = STATUS_META[c.metrics.status], Icon = meta.icon;
+          const justUpdated = c.metrics.lastTick === topBarProps.globalTick;
           return (
-            <button key={c.id} className="tg-row tg-grid-row" onClick={() => onOpenClient(c.id)}
-              style={{ all: "unset", cursor: "pointer", width: "100%", boxSizing: "border-box", display: "grid", padding: "12px 16px", borderBottom: `1px solid ${COLORS.border}` }}>
+            <div key={c.id} role="button" tabIndex={0}
+              className="tg-row tg-grid-row"
+              onClick={() => onOpenClient(c.id)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenClient(c.id); } }}
+              style={{
+                cursor: "pointer", boxSizing: "border-box", padding: "12px 16px",
+                borderBottom: `1px solid ${COLORS.border}`, background: "transparent",
+              }}>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nome}</div>
+                <div style={{ fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nome}</span>
+                  {justUpdated && <span key={topBarProps.globalTick} className="tg-ping" style={{ flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: 8.5, color: COLORS.blue, background: COLORS.blueSoft, padding: "1px 5px", borderRadius: 4 }}>SINAL</span>}
+                </div>
                 <div style={{ fontSize: 11, color: COLORS.muted, fontFamily: "var(--font-mono)" }}>{c.codigo}</div>
               </div>
               <div className="tg-hide-mobile" style={{ fontSize: 12, color: COLORS.muted }}>{c.cidade}</div>
@@ -607,7 +617,7 @@ function ListScreen({ base, city, statusFilter, setStatusFilter, list, onOpenCli
                 <Icon size={12} /> {meta.label}
               </div>
               <ChevronRight size={15} color={COLORS.muted} />
-            </button>
+            </div>
           );
         })}
       </div>

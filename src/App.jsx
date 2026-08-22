@@ -6,7 +6,7 @@ import {
 import {
   Play, Pause, AlertTriangle, AlertOctagon, CheckCircle2, WifiOff,
   Truck, ChevronDown, ChevronRight, ChevronLeft, Radio, Gauge as GaugeIcon,
-  SkipForward, FileSpreadsheet, MapPin, Building2, Users, Fuel, Hash, TrendingDown, Activity, CalendarClock, Bell,
+  SkipForward, FileSpreadsheet, MapPin, Building2, Users, Fuel, Hash, TrendingDown, Activity, CalendarClock, Bell, Wrench,
 } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
 
@@ -224,13 +224,21 @@ function computeMetrics(client, globalTick) {
 
   let status = "ok", motivo = "Consumo dentro do padrão histórico do cliente.";
   if (semSinal) { status = "falha"; motivo = `Sem leitura recebida há ${ticksSinceSignal} ciclos.`; }
-  else if (last.nivel <= cfg.limiteAprendido) { status = "critico"; motivo = "Nível já atingiu o limite de risco aprendido."; }
-  else if (isFinite(diasEstimados) && diasEstimados <= 2.5) { status = "atencao"; motivo = `Projeção indica ${diasEstimados.toFixed(1)} dia(s) até o limite.`; }
+  else if (last.nivel <= cfg.limiteAprendido) { status = "critico"; motivo = "Nível atingiu o limite de risco — equipamento do cliente pode parar de funcionar. Abastecimento não pode mais esperar."; }
+  else if (isFinite(diasEstimados) && diasEstimados <= 2.5) { status = "atencao"; motivo = `Projeção indica ${diasEstimados.toFixed(1)} dia(s) até o limite — precisa ser resolvido agora, antes de virar crítico.`; }
   else if (sensorParado) { status = "atencao"; motivo = "Sinal sem variação — possível falha do magnétron."; }
   else if (consumoAnomalo) { status = "atencao"; motivo = "Taxa de consumo acima do padrão histórico."; }
+  else if (isFinite(diasEstimados) && diasEstimados <= 5) { status = "aproximando"; motivo = `Projeção indica ${diasEstimados.toFixed(1)} dia(s) até o limite — de olho, deve entrar em Atenção em breve.`; }
+
+  const precisaRevisao = consumoAnomalo || cfg.limiteAprendido > 30;
+  const motivosRevisao = [];
+  if (cfg.limiteAprendido > 30) motivosRevisao.push("limite de risco aprendido bem acima do padrão (30%), típico de tancagem baixa ou dimensionamento errado pro consumo real");
+  if (consumoAnomalo) motivosRevisao.push("consumo subiu de forma consistente acima da média histórica — pode indicar aumento de equipamentos ou mudança de operação");
+  const motivoRevisao = motivosRevisao.join("; ") || null;
 
   return { nivelAtual: last.nivel, lastTick: last.tick, semSinal, ticksSinceSignal, recentRate,
-    taxaDiaria, diasEstimados, sensorParado, consumoAnomalo, resupplyEvents, status, motivo };
+    taxaDiaria, diasEstimados, sensorParado, consumoAnomalo, resupplyEvents, status, motivo,
+    precisaRevisao, motivoRevisao };
 }
 
 function buildChartData(client, metrics) {
@@ -273,7 +281,8 @@ function getAbastecimento(client, metrics) {
 }
 
 const STATUS_META = {
-  ok: { label: "Normal", color: COLORS.green, bg: COLORS.greenSoft, icon: CheckCircle2, rank: 3 },
+  ok: { label: "Normal", color: COLORS.green, bg: COLORS.greenSoft, icon: CheckCircle2, rank: 4 },
+  aproximando: { label: "Aproximando", color: "#5FBEDB", bg: "rgba(95,190,219,0.14)", icon: TrendingDown, rank: 3 },
   atencao: { label: "Atenção", color: COLORS.amber, bg: COLORS.amberSoft, icon: AlertTriangle, rank: 1 },
   critico: { label: "Crítico", color: COLORS.red, bg: COLORS.redSoft, icon: AlertOctagon, rank: 0 },
   falha: { label: "Sem sinal", color: COLORS.purple, bg: COLORS.purpleSoft, icon: WifiOff, rank: 2 },
@@ -380,7 +389,7 @@ function TopBar({ title, subtitle, onBack, running, setRunning, speedSec, setSpe
         <div style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.blue, fontFamily: "var(--font-mono)", fontSize: 11.5, letterSpacing: 1, marginBottom: 5 }}>
           <Radio size={12} /> TELEMETRIA GLP
         </div>
-        <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: -0.4 }}>{title}</h1>
+        <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 700, margin: 0, letterSpacing: -0.4, color: COLORS.text }}>{title}</h1>
         {subtitle && <p style={{ color: COLORS.muted, fontSize: 13, marginTop: 4, maxWidth: 480 }}>{subtitle}</p>}
       </div>
 
@@ -389,7 +398,7 @@ function TopBar({ title, subtitle, onBack, running, setRunning, speedSec, setSpe
           {running ? <span className="tg-livedot" /> : <span style={{ width: 9, height: 9, borderRadius: "50%", background: COLORS.faint, display: "inline-block" }} />}
           <span style={{ color: running ? COLORS.green : COLORS.muted }}>{running ? "AO VIVO" : "PARADO"}</span>
         </div>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: COLORS.muted }}>{formatTickLabel(globalTick)}</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 11.5, color: COLORS.muted }}>{formatDate(TODAY)}</span>
         <button className="tg-btn" onClick={() => setRunning((r) => !r)} style={{ display: "flex", alignItems: "center", gap: 5, background: running ? COLORS.redSoft : COLORS.greenSoft, color: running ? COLORS.red : COLORS.green, border: "none", borderRadius: 8, padding: "6px 10px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
           {running ? <Pause size={13} /> : <Play size={13} />} {running ? "Parar" : "Iniciar"}
         </button>
@@ -423,7 +432,7 @@ function LiveOverview({ counts, total, running, setRunning, speedSec, setSpeedSe
           <div style={{ display: "flex", alignItems: "center", gap: 5, fontFamily: "var(--font-mono)", fontSize: 11 }}>
             {running ? <span className="tg-livedot" /> : <span style={{ width: 8, height: 8, borderRadius: "50%", background: COLORS.faint, display: "inline-block" }} />}
             <span style={{ color: running ? COLORS.green : COLORS.muted }}>{running ? "AO VIVO" : "PARADO"}</span>
-            <span style={{ color: COLORS.faint }}>· {formatTickLabel(globalTick)}</span>
+            <span style={{ color: COLORS.faint }}>· {formatDate(TODAY)}</span>
           </div>
           <button className="tg-btn" onClick={() => setRunning((r) => !r)} style={{ display: "flex", alignItems: "center", gap: 5, background: running ? COLORS.redSoft : COLORS.greenSoft, color: running ? COLORS.red : COLORS.green, border: "none", borderRadius: 8, padding: "5px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
             {running ? <Pause size={12} /> : <Play size={12} />} {running ? "Parar" : "Iniciar"}
@@ -439,7 +448,7 @@ function LiveOverview({ counts, total, running, setRunning, speedSec, setSpeedSe
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8, flex: "1 1 260px", minWidth: 240 }}>
-          {["critico", "falha", "atencao", "ok"].map((s) => {
+          {["critico", "falha", "atencao", "aproximando", "ok"].map((s) => {
             const meta = STATUS_META[s], Icon = meta.icon;
             const clickable = s === "critico" || s === "atencao";
             return (
@@ -529,7 +538,7 @@ function BaseSelectScreen({ enrichedAll, onPick, liveProps, onOpenAlerts }) {
 --------------------------------------------------------------------- */
 function DashboardScreen({ base, city, setCity, scopeClients, allBaseClients, onIndicatorClick, onSeeAll, onDrillCity, ...topBarProps }) {
   const counts = useMemo(() => {
-    const b = { ok: 0, atencao: 0, critico: 0, falha: 0 };
+    const b = { ok: 0, atencao: 0, critico: 0, falha: 0, aproximando: 0 };
     scopeClients.forEach((c) => b[c.metrics.status]++);
     return b;
   }, [scopeClients]);
@@ -538,7 +547,7 @@ function DashboardScreen({ base, city, setCity, scopeClients, allBaseClients, on
     if (city !== "all") return [];
     return base.cidades.map((cid) => {
       const list = allBaseClients.filter((c) => c.cidade === cid);
-      const b = { ok: 0, atencao: 0, critico: 0, falha: 0 };
+      const b = { ok: 0, atencao: 0, critico: 0, falha: 0, aproximando: 0 };
       list.forEach((c) => b[c.metrics.status]++);
       return { cidade: cid, total: list.length, ...b };
     });
@@ -562,7 +571,7 @@ function DashboardScreen({ base, city, setCity, scopeClients, allBaseClients, on
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 10, marginBottom: 14 }}>
-        {["critico", "falha", "atencao", "ok"].map((s) => {
+        {["critico", "falha", "atencao", "aproximando", "ok"].map((s) => {
           const meta = STATUS_META[s], Icon = meta.icon;
           return (
             <button key={s} className="tg-card" onClick={() => onIndicatorClick(s)}
@@ -593,7 +602,7 @@ function DashboardScreen({ base, city, setCity, scopeClients, allBaseClients, on
                 <span style={{ fontSize: 11.5, color: COLORS.faint }}>({row.total} clientes)</span>
               </div>
               <div style={{ display: "flex", gap: 6 }}>
-                {["critico", "falha", "atencao", "ok"].map((s) => row[s] > 0 && (
+                {["critico", "falha", "atencao", "aproximando", "ok"].map((s) => row[s] > 0 && (
                   <span key={s} style={{ fontSize: 11, fontWeight: 600, color: STATUS_META[s].color, background: STATUS_META[s].bg, padding: "2px 7px", borderRadius: 20 }}>{row[s]}</span>
                 ))}
                 <ChevronRight size={15} color={COLORS.faint} />
@@ -621,41 +630,36 @@ function ListScreen({ base, city, statusFilter, setStatusFilter, list, onOpenCli
         </button>
       )}
       <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 14, overflow: "hidden" }}>
-        <div className="tg-grid-row" style={{ padding: "10px 16px", fontSize: 11, color: COLORS.faint, letterSpacing: 0.4, borderBottom: `1px solid ${COLORS.border}` }}>
-          <span>CLIENTE</span>
-          <span className="tg-hide-mobile">CIDADE</span>
-          <span className="tg-hide-mobile">B-190</span>
-          <span>NÍVEL</span>
-          <span>STATUS</span>
-          <span />
-        </div>
         {sorted.length === 0 && <div style={{ padding: 24, textAlign: "center", color: COLORS.faint, fontSize: 13 }}>Nenhum cliente neste filtro.</div>}
         {sorted.map((c) => {
           const meta = STATUS_META[c.metrics.status], Icon = meta.icon;
           const justUpdated = c.metrics.lastTick === topBarProps.globalTick;
           return (
             <div key={c.id} role="button" tabIndex={0}
-              className="tg-row tg-grid-row"
               onClick={() => onOpenClient(c.id)}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenClient(c.id); } }}
-              style={{
-                cursor: "pointer", boxSizing: "border-box", padding: "12px 16px",
-                borderBottom: `1px solid ${COLORS.border}`, background: "transparent",
-              }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nome}</span>
-                  {justUpdated && <span key={topBarProps.globalTick} className="tg-ping" style={{ flexShrink: 0, fontFamily: "var(--font-mono)", fontSize: 8.5, color: COLORS.blue, background: COLORS.blueSoft, padding: "1px 5px", borderRadius: 4 }}>SINAL</span>}
+              style={{ cursor: "pointer", boxSizing: "border-box", padding: "12px 16px", borderBottom: `1px solid ${COLORS.border}` }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ minWidth: 0, flex: "1 1 200px" }}>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: COLORS.text, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    {c.nome}
+                    {justUpdated && <span key={topBarProps.globalTick} className="tg-ping" style={{ fontFamily: "var(--font-mono)", fontSize: 8.5, color: COLORS.blue, background: COLORS.blueSoft, padding: "1px 5px", borderRadius: 4 }}>SINAL</span>}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: COLORS.muted, fontFamily: "var(--font-mono)", marginTop: 2 }}>Cod: {c.codigo} · {c.cidade}</div>
                 </div>
-                <div style={{ fontSize: 11, color: COLORS.muted, fontFamily: "var(--font-mono)" }}>{c.codigo}</div>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 17, fontWeight: 700, color: COLORS.text, flexShrink: 0 }}>
+                  {c.metrics.semSinal ? "—" : `${c.metrics.nivelAtual.toFixed(0)}%`}
+                </div>
               </div>
-              <div className="tg-hide-mobile" style={{ fontSize: 12, color: COLORS.muted }}>{c.cidade}</div>
-              <div className="tg-hide-mobile" style={{ fontSize: 12, color: COLORS.muted, display: "flex", alignItems: "center", gap: 4 }}><Fuel size={12} /> {c.numB190}</div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600 }}>{c.metrics.semSinal ? "—" : `${c.metrics.nivelAtual.toFixed(0)}%`}</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 5, background: meta.bg, color: meta.color, padding: "3px 8px", borderRadius: 20, fontSize: 11.5, fontWeight: 600, width: "fit-content" }}>
-                <Icon size={12} /> {meta.label}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 5, background: meta.bg, color: meta.color, padding: "3px 8px", borderRadius: 20, fontSize: 11.5, fontWeight: 600 }}>
+                  <Icon size={12} /> {meta.label}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ fontSize: 11.5, color: COLORS.muted, display: "flex", alignItems: "center", gap: 4 }}><Fuel size={12} /> {c.numB190} B-190</div>
+                  <ChevronRight size={15} color={COLORS.muted} />
+                </div>
               </div>
-              <ChevronRight size={15} color={COLORS.muted} />
             </div>
           );
         })}
@@ -676,6 +680,7 @@ function AlertsScreen({ enrichedAll, onOpenClient, onBack, ...topBarProps }) {
     .sort((a, b) => STATUS_META[a.metrics.status].rank - STATUS_META[b.metrics.status].rank
       || (a.metrics.diasEstimados - b.metrics.diasEstimados)), [enrichedAll]);
   const sinalList = useMemo(() => enrichedAll.filter((c) => c.metrics.status === "falha"), [enrichedAll]);
+  const revisaoList = useMemo(() => enrichedAll.filter((c) => c.metrics.precisaRevisao), [enrichedAll]);
 
   return (
     <div style={{ maxWidth: 1080, margin: "0 auto", minWidth: 0 }}>
@@ -701,7 +706,7 @@ function AlertsScreen({ enrichedAll, onOpenClient, onBack, ...topBarProps }) {
                   <Icon size={14} color={meta.color} /> {c.nome}
                 </div>
                 <div style={{ fontSize: 11.5, color: COLORS.muted, marginTop: 2 }}>
-                  {c.baseNome} · {c.cidade} · Gerente {c.gerente}
+                  Cod: {c.codigo} · {c.baseNome} · {c.cidade} · Gerente {c.gerente}
                 </div>
                 <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
                   <CalendarClock size={11} /> rota programada: {FREQ_LABELS[c.frequencia]} · {c.diaSemana}
@@ -741,6 +746,29 @@ function AlertsScreen({ enrichedAll, onOpenClient, onBack, ...topBarProps }) {
           </div>
         ))}
       </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, marginTop: 22 }}>
+        <Wrench size={15} color={COLORS.purple} />
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>Padrão fora do esperado — revisar com consultor ({revisaoList.length})</span>
+      </div>
+      <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 14, overflow: "hidden" }}>
+        {revisaoList.length === 0 && <div style={{ padding: 24, textAlign: "center", color: COLORS.faint, fontSize: 13 }}>Nenhum cliente com padrão fora do esperado no momento.</div>}
+        {revisaoList.map((c) => (
+          <div key={c.id} role="button" tabIndex={0}
+            onClick={() => onOpenClient(c)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenClient(c); } }}
+            style={{ cursor: "pointer", padding: "12px 16px", borderBottom: `1px solid ${COLORS.border}` }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 13.5, fontWeight: 700 }}>{c.nome}</div>
+                <div style={{ fontSize: 11.5, color: COLORS.muted }}>{c.baseNome} · {c.cidade} · Cod: {c.codigo}</div>
+              </div>
+              <ChevronRight size={16} color={COLORS.muted} />
+            </div>
+            <div style={{ fontSize: 11.5, color: COLORS.purple, marginTop: 6 }}>{c.metrics.motivoRevisao}</div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -766,14 +794,19 @@ function DetailScreen({ client, globalTick, onBack }) {
       <div style={{ marginBottom: 6 }}>
         <span style={{ background: meta.bg, color: meta.color, padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{meta.label}</span>
       </div>
-      <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24, fontWeight: 700, margin: "4px 0 2px" }}>{client.nome}</h1>
+      <h1 style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, margin: "4px 0 2px", color: COLORS.text, wordBreak: "break-word" }}>{client.nome}</h1>
       <div style={{ fontSize: 12.5, color: COLORS.muted, marginBottom: 4, display: "flex", flexWrap: "wrap", gap: 10 }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 4 }}><Hash size={12} /> {client.codigo}</span>
-        <span style={{ display: "flex", alignItems: "center", gap: 4 }}><MapPin size={12} /> {client.endereco}</span>
+        <span style={{ fontFamily: "var(--font-mono)" }}>Cod: {client.codigo}</span>
+        <span>Cidade: <b style={{ color: COLORS.text }}>{client.cidade}</b></span>
         <span>Base {client.baseNome} · Gerente {client.gerente}</span>
       </div>
-      <div style={{ fontSize: 12, color: COLORS.faint, marginBottom: 14, display: "flex", alignItems: "center", gap: 5 }}>
-        <Fuel size={12} /> {client.numB190} × B-190 ({client.capacidadeKg} kg de capacidade nominal · enche até ~80% por margem de vaporização)
+      <div style={{ fontSize: 12, color: COLORS.faint, marginBottom: 14, display: "flex", alignItems: "center", gap: 4 }}>
+        <MapPin size={12} /> {client.endereco}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginBottom: 14 }}>
+        <Stat label="B-190 instalados" value={client.numB190} />
+        <Stat label="Capacidade total" value={`${client.capacidadeKg} kg`} sub={`enche até ~${FULL_LEVEL}%`} />
       </div>
 
       <div style={{
@@ -793,6 +826,16 @@ function DetailScreen({ client, globalTick, onBack }) {
           </div>
         )}
       </div>
+
+      {metrics.precisaRevisao && (
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: COLORS.purpleSoft, border: `1px solid ${COLORS.purple}55`, borderRadius: 12, padding: "12px 16px", marginBottom: 18 }}>
+          <Wrench size={16} color={COLORS.purple} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.purple }}>Padrão fora do esperado — revisar com o consultor</div>
+            <div style={{ fontSize: 11.5, color: COLORS.muted, marginTop: 2 }}>{metrics.motivoRevisao}</div>
+          </div>
+        </div>
+      )}
 
       <div className="tg-detail-grid">
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
@@ -907,7 +950,7 @@ export default function TelemetriaSimulador() {
   const enrichedAll = useMemo(() => clients.map((c) => ({ ...c, metrics: computeMetrics(c, globalTick) })), [clients, globalTick]);
 
   const globalCounts = useMemo(() => {
-    const b = { ok: 0, atencao: 0, critico: 0, falha: 0 };
+    const b = { ok: 0, atencao: 0, critico: 0, falha: 0, aproximando: 0 };
     enrichedAll.forEach((c) => b[c.metrics.status]++);
     return b;
   }, [enrichedAll]);

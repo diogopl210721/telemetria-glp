@@ -6,7 +6,7 @@ import {
 import {
   Play, Pause, AlertTriangle, AlertOctagon, CheckCircle2, WifiOff,
   Truck, ChevronDown, ChevronRight, ChevronLeft, Radio, Gauge as GaugeIcon,
-  SkipForward, FileSpreadsheet, MapPin, Building2, Users, Fuel, Hash, TrendingDown, Activity, CalendarClock,
+  SkipForward, FileSpreadsheet, MapPin, Building2, Users, Fuel, Hash, TrendingDown, Activity, CalendarClock, Bell,
 } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
 
@@ -410,7 +410,8 @@ function TopBar({ title, subtitle, onBack, running, setRunning, speedSec, setSpe
 /* ---------------------------------------------------------------------
    PAINEL AO VIVO — visão nacional (todas as bases), donut + tendência
 --------------------------------------------------------------------- */
-function LiveOverview({ counts, total, running, setRunning, speedSec, setSpeedSec, globalTick }) {
+function LiveOverview({ counts, total, running, setRunning, speedSec, setSpeedSec, globalTick, onOpenAlerts }) {
+  const alertCount = counts.critico + counts.atencao;
   return (
     <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 16, padding: "16px 18px", marginBottom: 20 }}>
       <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14 }}>
@@ -431,7 +432,7 @@ function LiveOverview({ counts, total, running, setRunning, speedSec, setSpeedSe
         </div>
       </div>
 
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, marginBottom: 12 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 16, marginBottom: 14 }}>
         <div style={{ textAlign: "center" }}>
           <div style={{ fontFamily: "var(--font-display)", fontSize: 30, fontWeight: 700 }}>{total}</div>
           <div style={{ fontSize: 9.5, color: COLORS.faint, letterSpacing: 0.3 }}>CLIENTES</div>
@@ -440,8 +441,12 @@ function LiveOverview({ counts, total, running, setRunning, speedSec, setSpeedSe
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8, flex: "1 1 260px", minWidth: 240 }}>
           {["critico", "falha", "atencao", "ok"].map((s) => {
             const meta = STATUS_META[s], Icon = meta.icon;
+            const clickable = s === "critico" || s === "atencao";
             return (
-              <div key={s} style={{ background: meta.bg, border: `1px solid ${meta.color}33`, borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div key={s} role={clickable ? "button" : undefined} tabIndex={clickable ? 0 : undefined}
+                onClick={clickable ? () => onOpenAlerts() : undefined}
+                onKeyDown={clickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenAlerts(); } } : undefined}
+                style={{ background: meta.bg, border: `1px solid ${meta.color}33`, borderRadius: 12, padding: "10px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: clickable ? "pointer" : "default" }}>
                 <div>
                   <div style={{ fontSize: 10.5, color: meta.color, fontWeight: 600, letterSpacing: 0.3 }}>{meta.label.toUpperCase()}</div>
                   <div style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, color: COLORS.text }}>{counts[s]}</div>
@@ -452,6 +457,24 @@ function LiveOverview({ counts, total, running, setRunning, speedSec, setSpeedSe
           })}
         </div>
       </div>
+
+      <div role="button" tabIndex={0} onClick={onOpenAlerts}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenAlerts(); } }}
+        style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer",
+          background: alertCount > 0 ? COLORS.redSoft : COLORS.panelAlt, border: `1px solid ${alertCount > 0 ? COLORS.red + "55" : COLORS.border}`,
+          borderRadius: 12, padding: "12px 16px", flexWrap: "wrap", gap: 8,
+        }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <Bell size={16} color={alertCount > 0 ? COLORS.red : COLORS.muted} />
+          <span style={{ fontSize: 13, fontWeight: 700, color: alertCount > 0 ? COLORS.red : COLORS.text }}>Central de Alertas</span>
+          <span style={{ fontSize: 12, color: COLORS.muted }}>clientes que precisam de abastecimento fora da rota programada</span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 700, color: alertCount > 0 ? COLORS.red : COLORS.muted }}>{alertCount}</span>
+          <ChevronRight size={16} color={COLORS.muted} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -459,7 +482,7 @@ function LiveOverview({ counts, total, running, setRunning, speedSec, setSpeedSe
 /* ---------------------------------------------------------------------
    TELA 1 — SELEÇÃO DE BASE
 --------------------------------------------------------------------- */
-function BaseSelectScreen({ enrichedAll, onPick, liveProps }) {
+function BaseSelectScreen({ enrichedAll, onPick, liveProps, onOpenAlerts }) {
   return (
     <div style={{ maxWidth: 900, margin: "40px auto" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.blue, fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: 1, marginBottom: 8 }}>
@@ -468,7 +491,7 @@ function BaseSelectScreen({ enrichedAll, onPick, liveProps }) {
       <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, margin: "0 0 4px", color: COLORS.text }}>Qual base você quer acompanhar?</h1>
       <p style={{ color: COLORS.muted, fontSize: 13.5, marginBottom: 16 }}>Selecione a base para abrir o painel de indicadores.</p>
 
-      <LiveOverview {...liveProps} />
+      <LiveOverview {...liveProps} onOpenAlerts={onOpenAlerts} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14 }}>
         {BASES.map((base) => {
@@ -644,6 +667,84 @@ function ListScreen({ base, city, statusFilter, setStatusFilter, list, onOpenCli
 /* ---------------------------------------------------------------------
    TELA 4 — DETALHE DO CLIENTE
 --------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   TELA — CENTRAL DE ALERTAS (clientes que precisam de ação fora da rota)
+--------------------------------------------------------------------- */
+function AlertsScreen({ enrichedAll, onOpenClient, onBack, ...topBarProps }) {
+  const actionList = useMemo(() => enrichedAll
+    .filter((c) => c.metrics.status === "critico" || c.metrics.status === "atencao")
+    .sort((a, b) => STATUS_META[a.metrics.status].rank - STATUS_META[b.metrics.status].rank
+      || (a.metrics.diasEstimados - b.metrics.diasEstimados)), [enrichedAll]);
+  const sinalList = useMemo(() => enrichedAll.filter((c) => c.metrics.status === "falha"), [enrichedAll]);
+
+  return (
+    <div style={{ maxWidth: 1080, margin: "0 auto", minWidth: 0 }}>
+      <TopBar title="Central de Alertas" subtitle="Clientes que precisam de abastecimento fora da rota programada, apontados automaticamente pela telemetria" onBack={onBack} {...topBarProps} />
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <Bell size={15} color={COLORS.red} />
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>Precisam de ação ({actionList.length})</span>
+      </div>
+
+      <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 14, overflow: "hidden", marginBottom: 22 }}>
+        {actionList.length === 0 && <div style={{ padding: 24, textAlign: "center", color: COLORS.faint, fontSize: 13 }}>Nenhum cliente precisando de ação fora da rota no momento.</div>}
+        {actionList.map((c) => {
+          const meta = STATUS_META[c.metrics.status], Icon = meta.icon;
+          const previsao = getPrevisao(c, c.metrics);
+          return (
+            <div key={c.id} role="button" tabIndex={0}
+              onClick={() => onOpenClient(c)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenClient(c); } }}
+              style={{ cursor: "pointer", padding: "14px 16px", borderBottom: `1px solid ${COLORS.border}`, display: "flex", flexWrap: "wrap", gap: 10, alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ minWidth: 0, flex: "1 1 220px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 14, fontWeight: 700 }}>
+                  <Icon size={14} color={meta.color} /> {c.nome}
+                </div>
+                <div style={{ fontSize: 11.5, color: COLORS.muted, marginTop: 2 }}>
+                  {c.baseNome} · {c.cidade} · Gerente {c.gerente}
+                </div>
+                <div style={{ fontSize: 11, color: COLORS.faint, marginTop: 2, display: "flex", alignItems: "center", gap: 4 }}>
+                  <CalendarClock size={11} /> rota programada: {FREQ_LABELS[c.frequencia]} · {c.diaSemana}
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 17, fontWeight: 700, color: meta.color }}>{c.metrics.nivelAtual.toFixed(0)}%</div>
+                <div style={{ fontSize: 11, color: COLORS.muted }}>limite: {c.config.limiteAprendido}%</div>
+              </div>
+              <div style={{ background: meta.bg, border: `1px solid ${meta.color}55`, borderRadius: 10, padding: "6px 10px", textAlign: "center", minWidth: 118 }}>
+                <div style={{ fontSize: 9.5, color: meta.color, fontWeight: 700, letterSpacing: 0.3 }}>PRECISA ATÉ</div>
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 13, fontWeight: 700 }}>{previsao.label}</div>
+                <div style={{ fontSize: 10, color: COLORS.muted }}>{previsao.sub}</div>
+              </div>
+              <ChevronRight size={16} color={COLORS.muted} />
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <WifiOff size={15} color={COLORS.purple} />
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>Sinal perdido — verificar sensor ({sinalList.length})</span>
+      </div>
+      <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 14, overflow: "hidden" }}>
+        {sinalList.length === 0 && <div style={{ padding: 24, textAlign: "center", color: COLORS.faint, fontSize: 13 }}>Nenhum cliente sem sinal no momento.</div>}
+        {sinalList.map((c) => (
+          <div key={c.id} role="button" tabIndex={0}
+            onClick={() => onOpenClient(c)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onOpenClient(c); } }}
+            style={{ cursor: "pointer", padding: "12px 16px", borderBottom: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 700 }}>{c.nome}</div>
+              <div style={{ fontSize: 11.5, color: COLORS.muted }}>{c.baseNome} · {c.cidade} · sem leitura há {c.metrics.ticksSinceSignal} ciclos</div>
+            </div>
+            <ChevronRight size={16} color={COLORS.muted} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DetailScreen({ client, globalTick, onBack }) {
   const metrics = useMemo(() => computeMetrics(client, globalTick), [client, globalTick]);
   const chartData = useMemo(() => buildChartData(client, metrics), [client, metrics]);
@@ -784,6 +885,7 @@ export default function TelemetriaSimulador() {
   const intervalRef = useRef(null);
 
   const [view, setView] = useState("baseSelect");
+  const [returnView, setReturnView] = useState("list");
   const [baseId, setBaseId] = useState(null);
   const [city, setCity] = useState("all");
   const [statusFilter, setStatusFilter] = useState(null);
@@ -816,7 +918,9 @@ export default function TelemetriaSimulador() {
   const listClients = useMemo(() => (statusFilter ? scopeClients.filter((c) => c.metrics.status === statusFilter) : scopeClients), [scopeClients, statusFilter]);
   const selectedClient = enrichedAll.find((c) => c.id === clientId) || null;
 
-  const exportScope = view === "list" ? listClients : scopeClients;
+  const exportScope = view === "list" ? listClients
+    : view === "alerts" ? enrichedAll.filter((c) => c.metrics.status === "critico" || c.metrics.status === "atencao")
+    : scopeClients;
   const handleExport = useCallback(() => {
     const headers = [
       "Cliente", "Código", "Cidade", "Status", "Nível atual (%)", "Limite aprendido (%)",
@@ -893,6 +997,7 @@ export default function TelemetriaSimulador() {
           enrichedAll={enrichedAll}
           onPick={(id) => { setBaseId(id); setCity("all"); setStatusFilter(null); setView("dashboard"); }}
           liveProps={{ counts: globalCounts, total: enrichedAll.length, running, setRunning, speedSec, setSpeedSec, globalTick }}
+          onOpenAlerts={() => setView("alerts")}
         />
       )}
 
@@ -911,14 +1016,23 @@ export default function TelemetriaSimulador() {
       {view === "list" && base && (
         <ListScreen
           base={base} city={city} statusFilter={statusFilter} setStatusFilter={setStatusFilter}
-          list={listClients} onOpenClient={(id) => { setClientId(id); setView("detail"); }}
+          list={listClients} onOpenClient={(id) => { setClientId(id); setReturnView("list"); setView("detail"); }}
           onBack={() => setView("dashboard")}
           {...topBarProps}
         />
       )}
 
+      {view === "alerts" && (
+        <AlertsScreen
+          enrichedAll={enrichedAll}
+          onOpenClient={(c) => { setBaseId(c.baseId); setCity(c.cidade); setStatusFilter(null); setClientId(c.id); setReturnView("alerts"); setView("detail"); }}
+          onBack={() => setView("baseSelect")}
+          {...topBarProps}
+        />
+      )}
+
       {view === "detail" && selectedClient && (
-        <DetailScreen client={selectedClient} globalTick={globalTick} onBack={() => setView("list")} />
+        <DetailScreen client={selectedClient} globalTick={globalTick} onBack={() => setView(returnView)} />
       )}
     </div>
   );

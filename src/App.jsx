@@ -8,14 +8,14 @@ import {
   Truck, ChevronDown, ChevronRight, ChevronLeft, Radio, Gauge as GaugeIcon,
   SkipForward, FileSpreadsheet, MapPin, Building2, Users, Fuel, Hash, TrendingDown, Activity, CalendarClock,
 } from "lucide-react";
-import * as XLSX from "xlsx";
+import * as XLSX from "xlsx-js-style";
 
 /* ---------------------------------------------------------------------
    TOKENS
 --------------------------------------------------------------------- */
 const COLORS = {
   bg: "#0D1116", panel: "#151B22", panelAlt: "#1A222B", border: "#26303B",
-  text: "#E7EDF3", muted: "#B9C3D1", faint: "#8B96A6",
+  text: "#FFFFFF", muted: "#E4E9EF", faint: "#B7C0CC",
   green: "#3FBF7F", greenSoft: "rgba(63,191,127,0.14)",
   amber: "#E8A33D", amberSoft: "rgba(232,163,61,0.14)",
   red: "#E5545C", redSoft: "rgba(229,84,92,0.14)",
@@ -247,6 +247,17 @@ function buildChartData(client, metrics) {
     }
   }
   return data;
+}
+
+function getPrevisao(client, metrics) {
+  if (metrics.semSinal) return { label: "indisponível", sub: "sem leitura recente" };
+  if (metrics.nivelAtual <= client.config.limiteAprendido) return { label: "hoje", sub: formatDate(TODAY) };
+  if (isFinite(metrics.diasEstimados)) {
+    const dias = Math.ceil(metrics.diasEstimados);
+    const d = new Date(TODAY); d.setDate(d.getDate() + dias);
+    return { label: formatDate(d), sub: dias === 0 ? "hoje" : `em ${dias} dia(s)` };
+  }
+  return { label: "sem previsão", sub: "consumo estável demais pra projetar" };
 }
 
 function getAbastecimento(client, metrics) {
@@ -644,19 +655,7 @@ function DetailScreen({ client, globalTick, onBack }) {
   const entregueKg = depoisKg - antesKg;
   const consumoKgDia = (metrics.taxaDiaria / 100) * client.capacidadeKg;
 
-  let previsaoLabel = "—", previsaoSub = "";
-  if (metrics.semSinal) {
-    previsaoLabel = "indisponível"; previsaoSub = "sem leitura recente";
-  } else if (metrics.nivelAtual <= client.config.limiteAprendido) {
-    previsaoLabel = "hoje"; previsaoSub = formatDate(TODAY);
-  } else if (isFinite(metrics.diasEstimados)) {
-    const dias = Math.ceil(metrics.diasEstimados);
-    const d = new Date(TODAY); d.setDate(d.getDate() + dias);
-    previsaoLabel = formatDate(d); previsaoSub = dias === 0 ? "hoje" : `em ${dias} dia(s)`;
-  } else {
-    previsaoLabel = "sem previsão"; previsaoSub = "consumo estável demais pra projetar";
-  }
-
+  const previsao = getPrevisao(client, metrics);
   return (
     <div style={{ maxWidth: 1080, margin: "0 auto", minWidth: 0 }}>
       <button className="tg-btn" onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: COLORS.blue, fontSize: 12.5, cursor: "pointer", padding: 0, marginBottom: 14 }}>
@@ -735,8 +734,8 @@ function DetailScreen({ client, globalTick, onBack }) {
               <span style={{ fontSize: 12.5, color: COLORS.muted }}>Próximo abastecimento previsto</span>
             </div>
             <div style={{ textAlign: "right" }}>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: COLORS.text }}>{previsaoLabel}</div>
-              <div style={{ fontSize: 11, color: COLORS.muted }}>{previsaoSub}</div>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: COLORS.text }}>{previsao.label}</div>
+              <div style={{ fontSize: 11, color: COLORS.muted }}>{previsao.sub}</div>
             </div>
           </div>
 
@@ -819,23 +818,69 @@ export default function TelemetriaSimulador() {
 
   const exportScope = view === "list" ? listClients : scopeClients;
   const handleExport = useCallback(() => {
-    const resumoRows = exportScope.map((c) => ({
-      Cliente: c.nome, "Código": c.codigo, Cidade: c.cidade, Base: c.baseNome, Gerente: c.gerente,
-      "B-190": c.numB190, Endereço: c.endereco,
-      "Frequência de abastecimento": FREQ_LABELS[c.frequencia], "Dia da rota": c.diaSemana,
-      Status: STATUS_META[c.metrics.status].label,
-      "Nível atual (%)": c.metrics.semSinal ? null : c.metrics.nivelAtual,
-      "Limite aprendido (%)": c.config.limiteAprendido,
-      "Taxa de consumo (%/dia)": +c.metrics.taxaDiaria.toFixed(2),
-      "Dias até o limite": isFinite(c.metrics.diasEstimados) ? +c.metrics.diasEstimados.toFixed(1) : null,
-      "Última leitura": formatTickLabel(c.metrics.lastTick), Motivo: c.metrics.motivo,
-    }));
+    const headers = [
+      "Cliente", "Código", "Cidade", "Status", "Nível atual (%)", "Limite aprendido (%)",
+      "Taxa de consumo (%/dia)", "Dias até o limite", "Próximo abastecimento", "Última leitura",
+      "Frequência", "Dia da rota", "B-190", "Endereço", "Motivo",
+    ];
+    const numCols = headers.length;
+    const blankRow = Array(numCols).fill("");
+    const padRow = (first) => [first, ...Array(numCols - 1).fill("")];
+
+    const dataRows = exportScope.map((c) => {
+      const m = c.metrics, previsao = getPrevisao(c, m);
+      return [
+        c.nome, c.codigo, c.cidade, STATUS_META[m.status].label,
+        m.semSinal ? "—" : m.nivelAtual, c.config.limiteAprendido,
+        +m.taxaDiaria.toFixed(2), isFinite(m.diasEstimados) ? +m.diasEstimados.toFixed(1) : "—",
+        previsao.label, formatTickLabel(m.lastTick), FREQ_LABELS[c.frequencia], c.diaSemana,
+        c.numB190, c.endereco, m.motivo,
+      ];
+    });
+
+    const aoa = [
+      padRow("CONSIGAZ"),
+      padRow("Relatório de Telemetria GLP — Painel de Risco de Abastecimento"),
+      padRow(`Base: ${base ? base.nome : "Todas as bases"}`),
+      padRow(`Cidade: ${city === "all" ? "Todas as cidades" : city}`),
+      padRow(`Gerado em: ${formatDate(new Date())} · ${exportScope.length} cliente(s)`),
+      blankRow,
+      headers,
+      ...dataRows,
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!merges"] = [0, 1, 2, 3, 4].map((r) => ({ s: { r, c: 0 }, e: { r, c: numCols - 1 } }));
+    ws["!cols"] = [{ wch: 28 }, { wch: 10 }, { wch: 16 }, { wch: 12 }, { wch: 13 }, { wch: 14 },
+      { wch: 15 }, { wch: 13 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 34 }, { wch: 42 }];
+
+    const NAVY = "1B3A5C", NAVY_LIGHT = "2E5479", WHITE = "FFFFFF", BORDER = "D9DEE4";
+    const STATUS_HEX = { critico: "E5545C", falha: "9A87E0", atencao: "E8A33D", ok: "3FBF7F" };
+    const thinBorder = { top: { style: "thin", color: { rgb: BORDER } }, bottom: { style: "thin", color: { rgb: BORDER } }, left: { style: "thin", color: { rgb: BORDER } }, right: { style: "thin", color: { rgb: BORDER } } };
+    const setCell = (r, c, style) => {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      if (ws[addr]) ws[addr].s = { ...(ws[addr].s || {}), ...style };
+    };
+
+    for (let c = 0; c < numCols; c++) setCell(0, c, { font: { bold: true, sz: 20, color: { rgb: WHITE } }, fill: { fgColor: { rgb: NAVY } }, alignment: { horizontal: "center", vertical: "center" } });
+    for (let c = 0; c < numCols; c++) setCell(1, c, { font: { italic: true, sz: 11, color: { rgb: WHITE } }, fill: { fgColor: { rgb: NAVY_LIGHT } }, alignment: { horizontal: "center" } });
+    for (const r of [2, 3, 4]) for (let c = 0; c < numCols; c++) setCell(r, c, { font: { bold: r !== 4, sz: 11, color: { rgb: NAVY } }, alignment: { horizontal: "left" } });
+
+    for (let c = 0; c < numCols; c++) setCell(6, c, { font: { bold: true, sz: 10.5, color: { rgb: WHITE } }, fill: { fgColor: { rgb: NAVY } }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: thinBorder });
+
+    dataRows.forEach((_, i) => {
+      const r = 7 + i;
+      const banding = i % 2 === 0 ? "FFFFFF" : "F1F4F8";
+      for (let c = 0; c < numCols; c++) setCell(r, c, { fill: { fgColor: { rgb: banding } }, border: thinBorder, font: { sz: 10.5 }, alignment: { vertical: "center" } });
+      const statusHex = STATUS_HEX[exportScope[i].metrics.status];
+      setCell(r, 3, { fill: { fgColor: { rgb: statusHex } }, font: { bold: true, sz: 10.5, color: { rgb: WHITE } }, border: thinBorder, alignment: { horizontal: "center", vertical: "center" } });
+      setCell(r, 0, { font: { bold: true, sz: 10.5 }, fill: { fgColor: { rgb: banding } }, border: thinBorder, alignment: { vertical: "center" } });
+    });
+
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(resumoRows);
-    ws["!cols"] = resumoRows[0] ? Object.keys(resumoRows[0]).map(() => ({ wch: 18 })) : [];
     XLSX.utils.book_append_sheet(wb, ws, "Resumo");
-    XLSX.writeFile(wb, `telemetria_glp_${(base?.nome || "todas").replace(/\s/g, "_")}_${formatTickLabel(globalTick).replace(/[^\w]+/g, "_")}.xlsx`);
-  }, [exportScope, base, globalTick]);
+    XLSX.writeFile(wb, `telemetria_glp_${(base?.nome || "todas").replace(/\s/g, "_")}_${formatDate(new Date()).replace(/\//g, "-")}.xlsx`);
+  }, [exportScope, base, city]);
 
   const topBarProps = { running, setRunning, speedSec, setSpeedSec, tick, globalTick, onExport: handleExport };
 

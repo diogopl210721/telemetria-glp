@@ -95,6 +95,12 @@ function genSeed(cfg, rng) {
   return pts.map((p) => ({ tick: p.tick, nivel: +Math.max(2, Math.min(98, p.nivel)).toFixed(1) }));
 }
 
+function genSeedSawtooth(cfg, rng) {
+  // padrão de quem já bateu Crítico várias vezes e foi abastecido fora da rota repetidamente
+  const targets = [78, 60, 40, 79, 61, 41, 80, 62, 42, 77, 59, 39, 78, 60];
+  return targets.map((v, i) => ({ tick: i, nivel: +Math.max(2, Math.min(82, v + (rng() - 0.5) * 3)).toFixed(1) }));
+}
+
 function generateClients() {
   const rng = mulberry32(1337);
   const clients = [];
@@ -132,7 +138,7 @@ function generateClients() {
         const frequencia = FREQUENCIAS[Math.floor(rng() * FREQUENCIAS.length)];
         const diaSemana = DIAS_SEMANA[Math.floor(rng() * DIAS_SEMANA.length)];
 
-        let history = genSeed(cfg, rng);
+        let history = behavior === "mal_dimensionado" ? genSeedSawtooth(cfg, rng) : genSeed(cfg, rng);
         if (behavior === "falha_sinal" && rng() < 0.55) {
           history = history.slice(0, -(2 + Math.floor(rng() * 3))); // já está sem sinal desde o carregamento
         }
@@ -230,15 +236,21 @@ function computeMetrics(client, globalTick) {
   else if (consumoAnomalo) { status = "atencao"; motivo = "Taxa de consumo acima do padrão histórico."; }
   else if (isFinite(diasEstimados) && diasEstimados <= 5) { status = "aproximando"; motivo = `Projeção indica ${diasEstimados.toFixed(1)} dia(s) até o limite — de olho, deve entrar em Atenção em breve.`; }
 
-  const precisaRevisao = consumoAnomalo || cfg.limiteAprendido > 30;
-  const motivosRevisao = [];
-  if (cfg.limiteAprendido > 30) motivosRevisao.push("limite de risco aprendido bem acima do padrão (30%), típico de tancagem baixa ou dimensionamento errado pro consumo real");
-  if (consumoAnomalo) motivosRevisao.push("consumo subiu de forma consistente acima da média histórica — pode indicar aumento de equipamentos ou mudança de operação");
-  const motivoRevisao = motivosRevisao.join("; ") || null;
+  let criticoEpisodes = 0;
+  for (let i = 0; i < hist.length; i++) {
+    const wasCritico = i > 0 && hist[i - 1].nivel <= cfg.limiteAprendido;
+    const isCritico = hist[i].nivel <= cfg.limiteAprendido;
+    if (isCritico && !wasCritico) criticoEpisodes++;
+  }
+  const abastecimentosCount = resupplyEvents.length;
+  const precisaRevisao = criticoEpisodes >= 4 && abastecimentosCount >= 3;
+  const motivoRevisao = precisaRevisao
+    ? `Já atingiu Crítico ${criticoEpisodes}x nas últimas ${abastecimentosCount} rotas — possível dimensionamento errado, tancagem baixa ou aumento de equipamentos/consumo.`
+    : null;
 
   return { nivelAtual: last.nivel, lastTick: last.tick, semSinal, ticksSinceSignal, recentRate,
     taxaDiaria, diasEstimados, sensorParado, consumoAnomalo, resupplyEvents, status, motivo,
-    precisaRevisao, motivoRevisao };
+    precisaRevisao, motivoRevisao, criticoEpisodes, abastecimentosCount };
 }
 
 function buildChartData(client, metrics) {
@@ -313,7 +325,7 @@ function Gauge({ level, limite, size = 200 }) {
   const fullTickOuter = polarToCartesian(cx, cy, r + 7, angleForLevel(FULL_LEVEL));
   const fullLabelPos = polarToCartesian(cx, cy, r + 18, angleForLevel(FULL_LEVEL));
   return (
-    <svg width={size} height={size / 1.7 + 14} viewBox={`0 0 ${size} ${size / 1.7 + 20}`}>
+    <svg width={size} height={size / 1.95} viewBox={`0 0 ${size} ${size / 1.95 + 6}`}>
       <path d={describeArc(cx, cy, r, angleForLevel(0), angleForLevel(limite))} stroke={COLORS.red} strokeWidth={12} fill="none" strokeLinecap="round" opacity={0.85} />
       <path d={describeArc(cx, cy, r, angleForLevel(limite), angleForLevel(Math.min(FULL_LEVEL, limite + 15)))} stroke={COLORS.amber} strokeWidth={12} fill="none" opacity={0.85} />
       <path d={describeArc(cx, cy, r, angleForLevel(Math.min(FULL_LEVEL, limite + 15)), angleForLevel(FULL_LEVEL))} stroke={COLORS.green} strokeWidth={12} fill="none" strokeLinecap="round" opacity={0.85} />
@@ -645,19 +657,19 @@ function ListScreen({ base, city, statusFilter, setStatusFilter, list, onOpenCli
                     {c.nome}
                     {justUpdated && <span key={topBarProps.globalTick} className="tg-ping" style={{ fontFamily: "var(--font-mono)", fontSize: 8.5, color: COLORS.blue, background: COLORS.blueSoft, padding: "1px 5px", borderRadius: 4 }}>SINAL</span>}
                   </div>
-                  <div style={{ fontSize: 11.5, color: COLORS.muted, fontFamily: "var(--font-mono)", marginTop: 2 }}>Cod: {c.codigo} · {c.cidade}</div>
+                  <div style={{ fontSize: 11.5, color: COLORS.muted, fontFamily: "var(--font-mono)", marginTop: 2, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                    <span>Cod: {c.codigo} · {c.cidade} ·</span>
+                    <span style={{ display: "flex", alignItems: "center", gap: 3 }}><Fuel size={11} /> {c.numB190} B-190</span>
+                  </div>
                 </div>
-                <div style={{ fontFamily: "var(--font-mono)", fontSize: 17, fontWeight: 700, color: COLORS.text, flexShrink: 0 }}>
-                  {c.metrics.semSinal ? "—" : `${c.metrics.nivelAtual.toFixed(0)}%`}
-                </div>
+                <ChevronRight size={15} color={COLORS.muted} style={{ flexShrink: 0, marginTop: 2 }} />
               </div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 5, background: meta.bg, color: meta.color, padding: "3px 8px", borderRadius: 20, fontSize: 11.5, fontWeight: 600 }}>
                   <Icon size={12} /> {meta.label}
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div style={{ fontSize: 11.5, color: COLORS.muted, display: "flex", alignItems: "center", gap: 4 }}><Fuel size={12} /> {c.numB190} B-190</div>
-                  <ChevronRight size={15} color={COLORS.muted} />
+                <div style={{ fontFamily: "var(--font-mono)", fontSize: 15, fontWeight: 700, color: COLORS.text }}>
+                  {c.metrics.semSinal ? "—" : `${c.metrics.nivelAtual.toFixed(0)}%`}
                 </div>
               </div>
             </div>
@@ -685,6 +697,10 @@ function AlertsScreen({ enrichedAll, onOpenClient, onBack, ...topBarProps }) {
   return (
     <div style={{ maxWidth: 1080, margin: "0 auto", minWidth: 0 }}>
       <TopBar title="Central de Alertas" subtitle="Clientes que precisam de abastecimento fora da rota programada, apontados automaticamente pela telemetria" onBack={onBack} {...topBarProps} />
+
+      <div style={{ background: COLORS.blueSoft, border: `1px solid ${COLORS.blue}44`, borderRadius: 12, padding: "10px 14px", marginBottom: 16, fontSize: 12.5, color: COLORS.text }}>
+        <b>Objetivo do monitoramento:</b> nunca deixar chegar no Crítico. Todo cliente precisa ser resolvido ainda no Atenção — no Crítico, o equipamento do cliente já pode parar de funcionar.
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
         <Bell size={15} color={COLORS.red} />
@@ -805,12 +821,12 @@ function DetailScreen({ client, globalTick, onBack }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginBottom: 14 }}>
-        <Stat label="B-190 instalados" value={client.numB190} />
-        <Stat label="Capacidade total" value={`${client.capacidadeKg} kg`} sub={`enche até ~${FULL_LEVEL}%`} />
+        <Stat label="B-190 instalados" value={client.numB190} inline />
+        <Stat label="Capacidade total" value={`${client.capacidadeKg} kg`} inline />
       </div>
 
       <div style={{
-        display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 18,
+        display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10, marginBottom: 14,
         background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "12px 16px",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
@@ -828,7 +844,7 @@ function DetailScreen({ client, globalTick, onBack }) {
       </div>
 
       {metrics.precisaRevisao && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: COLORS.purpleSoft, border: `1px solid ${COLORS.purple}55`, borderRadius: 12, padding: "12px 16px", marginBottom: 18 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: COLORS.purpleSoft, border: `1px solid ${COLORS.purple}55`, borderRadius: 12, padding: "12px 16px", marginBottom: 14 }}>
           <Wrench size={16} color={COLORS.purple} style={{ flexShrink: 0, marginTop: 1 }} />
           <div>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.purple }}>Padrão fora do esperado — revisar com o consultor</div>
@@ -907,7 +923,15 @@ function DetailScreen({ client, globalTick, onBack }) {
   );
 }
 
-function Stat({ label, value, sub }) {
+function Stat({ label, value, sub, inline }) {
+  if (inline) {
+    return (
+      <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "10px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <span style={{ fontSize: 12, color: COLORS.muted }}>{label}</span>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: COLORS.text }}>{value}</span>
+      </div>
+    );
+  }
   return (
     <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "9px 12px" }}>
       <div style={{ fontSize: 10.5, color: COLORS.faint, marginBottom: 3 }}>{label}</div>

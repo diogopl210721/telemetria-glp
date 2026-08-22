@@ -85,7 +85,7 @@ function genSeed(cfg, rng) {
   let level = cfg.seedEnd + cfg.baseRatePerTick * (n - 1);
   const pts = [];
   for (let i = 0; i < n; i++) {
-    if (i > 0) level = level - cfg.baseRatePerTick + (rng() - 0.5) * 0.4;
+    if (i > 0) level = level - cfg.baseRatePerTick + (rng() - 0.5) * cfg.baseRatePerTick * 0.35;
     pts.push({ tick: i, nivel: level });
   }
   if (cfg.freezeLastN > 0) {
@@ -211,11 +211,11 @@ function advanceClient(client, newTick) {
     nivel = last + (Math.random() - 0.5) * 0.2;
   } else if (cfg.behavior === "anomalia_alta") {
     const rate = newTick >= cfg.anomalyStartTick ? cfg.baseRatePerTick * 2.5 : cfg.baseRatePerTick;
-    nivel = last - rate + (Math.random() - 0.5) * 0.3;
+    nivel = last - rate + (Math.random() - 0.5) * rate * 0.3;
   } else if (cfg.behavior === "recem_abastecido" && newTick === cfg.resupplyTick) {
     nivel = 76 + Math.random() * 6; // caminhão chegou — nunca passa de ~80% (margem de vaporização)
   } else {
-    nivel = last - cfg.baseRatePerTick + (Math.random() - 0.5) * 0.3;
+    nivel = last - cfg.baseRatePerTick + (Math.random() - 0.5) * cfg.baseRatePerTick * 0.35;
   }
   nivel = +Math.max(0, Math.min(82, nivel)).toFixed(1); // teto físico realista
   return { ...client, history: [...client.history, { tick: newTick, nivel }] };
@@ -813,6 +813,12 @@ function AlertsScreen({ enrichedAll, onOpenClient, onBack, ...topBarProps }) {
 function DetailScreen({ client, globalTick, onBack }) {
   const metrics = useMemo(() => computeMetrics(client, globalTick), [client, globalTick]);
   const chartData = useMemo(() => buildChartData(client, metrics), [client, metrics]);
+  const [periodDays, setPeriodDays] = useState(30);
+  const filteredChartData = useMemo(() => {
+    if (periodDays === null) return chartData;
+    const cutoffTick = globalTick - periodDays * TICKS_PER_DAY;
+    return chartData.filter((p) => p.tick >= cutoffTick);
+  }, [chartData, periodDays, globalTick]);
   const abast = useMemo(() => getAbastecimento(client, metrics), [client, metrics]);
   const meta = STATUS_META[metrics.status];
 
@@ -885,9 +891,20 @@ function DetailScreen({ client, globalTick, onBack }) {
 
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 12.5, color: COLORS.muted, marginBottom: 10 }}>{metrics.motivo}</div>
+
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            {[{ label: "7d", v: 7 }, { label: "30d", v: 30 }, { label: "90d", v: 90 }, { label: "Tudo", v: null }].map((opt) => (
+              <button key={opt.label} onClick={() => setPeriodDays(opt.v)} style={{
+                background: periodDays === opt.v ? COLORS.blueSoft : COLORS.panelAlt,
+                color: periodDays === opt.v ? COLORS.blue : COLORS.muted,
+                border: `1px solid ${periodDays === opt.v ? COLORS.blue + "55" : COLORS.border}`,
+                borderRadius: 8, padding: "4px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer",
+              }}>{opt.label}</button>
+            ))}
+          </div>
           <div style={{ height: 190, minWidth: 0 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 6, right: 8, left: -18, bottom: 0 }}>
+              <ComposedChart data={filteredChartData} margin={{ top: 6, right: 8, left: -18, bottom: 0 }}>
                 <defs>
                   <linearGradient id={`fill-${client.id}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={meta.color} stopOpacity={0.35} />
@@ -925,6 +942,7 @@ function DetailScreen({ client, globalTick, onBack }) {
             <Stat label="Dias até o limite" value={isFinite(metrics.diasEstimados) ? metrics.diasEstimados.toFixed(1) : "—"} />
             <Stat label="Leituras recebidas" value={client.history.length} />
             <Stat label="Última leitura" value={formatTickLabel(metrics.lastTick)} />
+            <Stat label="Último abastecimento" value={abast.quando} />
           </div>
 
           <div style={{ marginTop: 16, background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "14px 16px" }}>

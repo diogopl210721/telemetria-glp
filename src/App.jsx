@@ -15,7 +15,7 @@ import * as XLSX from "xlsx";
 --------------------------------------------------------------------- */
 const COLORS = {
   bg: "#0D1116", panel: "#151B22", panelAlt: "#1A222B", border: "#26303B",
-  text: "#E7EDF3", muted: "#7E8CA0", faint: "#4B5867",
+  text: "#E7EDF3", muted: "#B9C3D1", faint: "#8B96A6",
   green: "#3FBF7F", greenSoft: "rgba(63,191,127,0.14)",
   amber: "#E8A33D", amberSoft: "rgba(232,163,61,0.14)",
   red: "#E5545C", redSoft: "rgba(229,84,92,0.14)",
@@ -154,10 +154,22 @@ function generateClients() {
 /* ---------------------------------------------------------------------
    SIMULAÇÃO / MÉTRICAS
 --------------------------------------------------------------------- */
+const TODAY = new Date();
+TODAY.setHours(0, 0, 0, 0);
+const ANCHOR_DAY_INDEX = Math.floor((SEED_LEN - 1) / 2); // tick "atual" no load = hoje
+
+function tickToDate(tick) {
+  const dayIndex = Math.floor(tick / 2) - ANCHOR_DAY_INDEX;
+  const d = new Date(TODAY);
+  d.setDate(d.getDate() + dayIndex);
+  return d;
+}
+function formatDate(d) {
+  return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+}
 function formatTickLabel(tick) {
-  const day = Math.floor(tick / 2) + 1;
   const period = tick % 2 === 0 ? "Manhã" : "Tarde";
-  return `D${day} · ${period}`;
+  return `${formatDate(tickToDate(tick))} · ${period}`;
 }
 
 function advanceClient(client, newTick) {
@@ -244,7 +256,9 @@ function getAbastecimento(client, metrics) {
     return { quando: formatTickLabel(client.history[idx].tick), antesPct, depoisPct, detectadoAoVivo: true };
   }
   const s = client.seedAbastecimento;
-  return { quando: `há ${s.diasAtras} dias (fora do período simulado)`, antesPct: s.antesPct, depoisPct: s.depoisPct, detectadoAoVivo: false };
+  const d = new Date(TODAY);
+  d.setDate(d.getDate() - s.diasAtras);
+  return { quando: `${formatDate(d)} (há ${s.diasAtras} dias)`, antesPct: s.antesPct, depoisPct: s.depoisPct, detectadoAoVivo: false };
 }
 
 const STATUS_META = {
@@ -630,6 +644,19 @@ function DetailScreen({ client, globalTick, onBack }) {
   const entregueKg = depoisKg - antesKg;
   const consumoKgDia = (metrics.taxaDiaria / 100) * client.capacidadeKg;
 
+  let previsaoLabel = "—", previsaoSub = "";
+  if (metrics.semSinal) {
+    previsaoLabel = "indisponível"; previsaoSub = "sem leitura recente";
+  } else if (metrics.nivelAtual <= client.config.limiteAprendido) {
+    previsaoLabel = "hoje"; previsaoSub = formatDate(TODAY);
+  } else if (isFinite(metrics.diasEstimados)) {
+    const dias = Math.ceil(metrics.diasEstimados);
+    const d = new Date(TODAY); d.setDate(d.getDate() + dias);
+    previsaoLabel = formatDate(d); previsaoSub = dias === 0 ? "hoje" : `em ${dias} dia(s)`;
+  } else {
+    previsaoLabel = "sem previsão"; previsaoSub = "consumo estável demais pra projetar";
+  }
+
   return (
     <div style={{ maxWidth: 1080, margin: "0 auto", minWidth: 0 }}>
       <button className="tg-btn" onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: COLORS.blue, fontSize: 12.5, cursor: "pointer", padding: 0, marginBottom: 14 }}>
@@ -699,7 +726,21 @@ function DetailScreen({ client, globalTick, onBack }) {
             </ResponsiveContainer>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8, marginTop: 14 }}>
+          <div style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8,
+            background: meta.bg, border: `1px solid ${meta.color}44`, borderRadius: 12, padding: "12px 16px", marginTop: 14,
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <CalendarClock size={16} color={meta.color} />
+              <span style={{ fontSize: 12.5, color: COLORS.muted }}>Próximo abastecimento previsto</span>
+            </div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: COLORS.text }}>{previsaoLabel}</div>
+              <div style={{ fontSize: 11, color: COLORS.muted }}>{previsaoSub}</div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 8, marginTop: 10 }}>
             <Stat label="Taxa de consumo" value={`${metrics.taxaDiaria.toFixed(1)}%/dia`} sub={`≈ ${consumoKgDia.toFixed(1)} kg/dia`} />
             <Stat label="Dias até o limite" value={isFinite(metrics.diasEstimados) ? metrics.diasEstimados.toFixed(1) : "—"} />
             <Stat label="Leituras recebidas" value={client.history.length} />

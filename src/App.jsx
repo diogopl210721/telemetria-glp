@@ -125,7 +125,19 @@ function generateClients() {
         if (behavior === "mal_dimensionado") baseRatePerTick *= 2.2 + rng() * 0.8;
         baseRatePerTick = +baseRatePerTick.toFixed(3);
 
-        const seedEnd = behavior === "recem_abastecido" ? 22 + rng() * 6 : 38 + rng() * 28;
+        const cicloDias = FREQ_DIAS[frequencia];
+        const seedAbastecimento = {
+          diasAtras: Math.max(1, Math.round(cicloDias * (0.15 + rng() * 0.55))),
+          antesPct: +(14 + rng() * 10).toFixed(1),
+          depoisPct: +(74 + rng() * 6).toFixed(1),
+        };
+
+        // o nível de partida tem que ser consequência do último abastecimento + consumo desde então —
+        // não um valor sorteado à parte, senão "semestral" com abastecimento recente não bate com a projeção.
+        const consumidoDesde = seedAbastecimento.diasAtras * impliedDailyRate;
+        const seedEnd = behavior === "recem_abastecido"
+          ? 22 + rng() * 6
+          : Math.max(limiteAprendido + 2, Math.min(FULL_LEVEL - 2, seedAbastecimento.depoisPct - consumidoDesde));
         const freezeLastN = behavior === "sensor_travado" ? 6 : 0;
         const offset = i % 5;
 
@@ -143,12 +155,6 @@ function generateClients() {
         const numero = 80 + (idx * 37) % 900;
         const codigo = String(20000 + idx);
         const capacidadeKg = numB190 * 190;
-        const cicloDias = FREQ_DIAS[frequencia];
-        const seedAbastecimento = {
-          diasAtras: Math.max(1, Math.round(cicloDias * (0.15 + rng() * 0.55))),
-          antesPct: +(14 + rng() * 10).toFixed(1),
-          depoisPct: +(74 + rng() * 6).toFixed(1),
-        };
 
         let history = behavior === "mal_dimensionado" ? genSeedSawtooth(cfg, rng) : genSeed(cfg, rng);
         if (behavior === "falha_sinal" && rng() < 0.55) {

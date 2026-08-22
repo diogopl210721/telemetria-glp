@@ -178,6 +178,14 @@ function formatTickLabel(tick) {
   return `${formatDate(tickToDate(tick))} · ${period}`;
 }
 
+function criticoStreak(history, limite) {
+  let count = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].nivel <= limite) count++; else break;
+  }
+  return count;
+}
+
 function advanceClient(client, newTick) {
   const cfg = client.config;
   const lastPoint = client.history[client.history.length - 1];
@@ -185,7 +193,13 @@ function advanceClient(client, newTick) {
 
   const last = lastPoint.nivel;
   let nivel;
-  if (cfg.behavior === "sensor_travado") {
+  const streak = criticoStreak(client.history, cfg.limiteAprendido);
+
+  if (streak >= 4) {
+    nivel = 76 + Math.random() * 6; // logística finalmente reagiu ao alerta de crítico prolongado
+  } else if (last <= cfg.limiteAprendido && cfg.behavior !== "recem_abastecido") {
+    nivel = last + (Math.random() - 0.5) * 0.15; // equipamento parado no Crítico — sem gás fluindo, sem consumo real
+  } else if (cfg.behavior === "sensor_travado") {
     nivel = last + (Math.random() - 0.5) * 0.2;
   } else if (cfg.behavior === "anomalia_alta") {
     const rate = newTick >= cfg.anomalyStartTick ? cfg.baseRatePerTick * 2.5 : cfg.baseRatePerTick;
@@ -195,7 +209,6 @@ function advanceClient(client, newTick) {
   } else {
     nivel = last - cfg.baseRatePerTick + (Math.random() - 0.5) * 0.3;
   }
-  if (nivel <= 4 && cfg.behavior !== "sensor_travado") nivel = 76 + Math.random() * 6;
   nivel = +Math.max(0, Math.min(82, nivel)).toFixed(1); // teto físico realista
   return { ...client, history: [...client.history, { tick: newTick, nivel }] };
 }
@@ -821,7 +834,7 @@ function DetailScreen({ client, globalTick, onBack }) {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginBottom: 14 }}>
-        <Stat label="B-190 instalados" value={client.numB190} inline />
+        <Stat label="B-190 instalados" value={client.numB190} inline valueFirst />
         <Stat label="Capacidade total" value={`${client.capacidadeKg} kg`} inline />
       </div>
 
@@ -923,12 +936,21 @@ function DetailScreen({ client, globalTick, onBack }) {
   );
 }
 
-function Stat({ label, value, sub, inline }) {
+function Stat({ label, value, sub, inline, valueFirst }) {
   if (inline) {
     return (
-      <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "10px 12px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-        <span style={{ fontSize: 12, color: COLORS.muted }}>{label}</span>
-        <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: COLORS.text }}>{value}</span>
+      <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "10px 12px", display: "flex", alignItems: "center", gap: 8, justifyContent: valueFirst ? "flex-start" : "space-between" }}>
+        {valueFirst ? (
+          <>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 18, fontWeight: 700, color: COLORS.text }}>{value}</span>
+            <span style={{ fontSize: 12, color: COLORS.muted }}>{label}</span>
+          </>
+        ) : (
+          <>
+            <span style={{ fontSize: 12, color: COLORS.muted }}>{label}</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: COLORS.text }}>{value}</span>
+          </>
+        )}
       </div>
     );
   }

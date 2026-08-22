@@ -6,7 +6,7 @@ import {
 import {
   Play, Pause, AlertTriangle, AlertOctagon, CheckCircle2, WifiOff,
   Truck, ChevronDown, ChevronRight, ChevronLeft, Radio, Gauge as GaugeIcon,
-  SkipForward, FileSpreadsheet, MapPin, Building2, Users, Fuel, Hash, TrendingDown, Activity, CalendarClock, Bell, Wrench,
+  SkipForward, FileSpreadsheet, MapPin, Building2, Users, Fuel, Hash, TrendingDown, Activity, CalendarClock, Bell, Wrench, Pencil, Plus, Trash2, X,
 } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
 
@@ -111,7 +111,10 @@ function generateClients() {
         const behavior = BEHAVIOR_PATTERN[i];
         const numB190 = NUMB190_PATTERN[i];
         const limiteAprendido = behavior === "mal_dimensionado" ? 50 : 30;
-        const frequencia = FREQUENCIAS[Math.floor(rng() * FREQUENCIAS.length)];
+        const FREQ_CURTAS = ["semanal", "15dias", "21dias"];
+        const frequencia = behavior === "recem_abastecido"
+          ? FREQ_CURTAS[Math.floor(rng() * FREQ_CURTAS.length)]
+          : FREQUENCIAS[Math.floor(rng() * FREQUENCIAS.length)];
         const diaSemana = DIAS_SEMANA[Math.floor(rng() * DIAS_SEMANA.length)];
 
         // taxa de consumo derivada da frequência contratada — trimestral tem que se comportar como trimestral,
@@ -140,8 +143,9 @@ function generateClients() {
         const numero = 80 + (idx * 37) % 900;
         const codigo = String(20000 + idx);
         const capacidadeKg = numB190 * 190;
+        const cicloDias = FREQ_DIAS[frequencia];
         const seedAbastecimento = {
-          diasAtras: 3 + Math.floor(rng() * 10),
+          diasAtras: Math.max(1, Math.round(cicloDias * (0.15 + rng() * 0.55))),
           antesPct: +(14 + rng() * 10).toFixed(1),
           depoisPct: +(74 + rng() * 6).toFixed(1),
         };
@@ -410,6 +414,50 @@ function GlobalStyle() {
   );
 }
 
+/* ---------------------------------------------------------------------
+   MODAL DE FORMULÁRIO GENÉRICO (usado por base/cidade/cliente)
+--------------------------------------------------------------------- */
+function FormModal({ title, fields, initial, onSave, onCancel, onDelete, deleteLabel }) {
+  const [values, setValues] = useState(initial);
+  const set = (key, v) => setValues((prev) => ({ ...prev, [key]: v }));
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onCancel}>
+      <div onClick={(e) => e.stopPropagation()} style={{
+        background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: "16px 16px 0 0",
+        padding: "20px 18px 24px", width: "100%", maxWidth: 480, maxHeight: "85vh", overflowY: "auto",
+      }}>
+        <div style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 700, color: COLORS.text, marginBottom: 16 }}>{title}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {fields.map((f) => (
+            <div key={f.key}>
+              <label style={{ fontSize: 11.5, color: COLORS.muted, display: "block", marginBottom: 4 }}>{f.label}</label>
+              {f.type === "select" ? (
+                <select value={values[f.key]} onChange={(e) => set(f.key, e.target.value)}
+                  style={{ width: "100%", boxSizing: "border-box", background: COLORS.panelAlt, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "9px 10px", fontSize: 13.5 }}>
+                  {f.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              ) : (
+                <input type={f.type || "text"} value={values[f.key]} min={f.min} max={f.max}
+                  onChange={(e) => set(f.key, f.type === "number" ? +e.target.value : e.target.value)}
+                  style={{ width: "100%", boxSizing: "border-box", background: COLORS.panelAlt, color: COLORS.text, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "9px 10px", fontSize: 13.5 }} />
+              )}
+            </div>
+          ))}
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 20 }}>
+          <button onClick={onCancel} style={{ flex: 1, background: COLORS.panelAlt, color: COLORS.muted, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "10px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Cancelar</button>
+          <button onClick={() => onSave(values)} style={{ flex: 2, background: COLORS.greenSoft, color: COLORS.green, border: "none", borderRadius: 8, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Salvar</button>
+        </div>
+        {onDelete && (
+          <button onClick={onDelete} style={{ width: "100%", marginTop: 8, background: "none", color: COLORS.red, border: `1px solid ${COLORS.red}55`, borderRadius: 8, padding: "9px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+            {deleteLabel || "Excluir"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TopBar({ title, subtitle, onBack, running, setRunning, speedSec, setSpeedSec, tick, globalTick, onExport }) {
   return (
     <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "flex-end", gap: 14, marginBottom: 16 }}>
@@ -524,11 +572,17 @@ function LiveOverview({ counts, total, running, setRunning, speedSec, setSpeedSe
 /* ---------------------------------------------------------------------
    TELA 1 — SELEÇÃO DE BASE
 --------------------------------------------------------------------- */
-function BaseSelectScreen({ enrichedAll, onPick, liveProps, onOpenAlerts }) {
+function BaseSelectScreen({ bases, enrichedAll, onPick, liveProps, onOpenAlerts, onAddBase, onEditBase }) {
+  const [manage, setManage] = useState(false);
   return (
     <div style={{ maxWidth: 900, margin: "40px auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.blue, fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: 1, marginBottom: 8 }}>
-        <Radio size={13} /> TELEMETRIA GLP
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, color: COLORS.blue, fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: 1 }}>
+          <Radio size={13} /> TELEMETRIA GLP
+        </div>
+        <button onClick={() => setManage((m) => !m)} style={{ display: "flex", alignItems: "center", gap: 5, background: manage ? COLORS.blueSoft : COLORS.panel, color: manage ? COLORS.blue : COLORS.muted, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "5px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>
+          <Pencil size={12} /> {manage ? "Concluir" : "Gerenciar"}
+        </button>
       </div>
       <h1 style={{ fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 700, margin: "0 0 4px", color: COLORS.text }}>Qual base você quer acompanhar?</h1>
       <p style={{ color: COLORS.muted, fontSize: 13.5, marginBottom: 16 }}>Selecione a base para abrir o painel de indicadores.</p>
@@ -536,31 +590,43 @@ function BaseSelectScreen({ enrichedAll, onPick, liveProps, onOpenAlerts }) {
       <LiveOverview {...liveProps} onOpenAlerts={onOpenAlerts} />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 14 }}>
-        {BASES.map((base) => {
+        {bases.map((base) => {
           const clientes = enrichedAll.filter((c) => c.baseId === base.id);
           const critico = clientes.filter((c) => c.metrics.status === "critico").length;
           return (
-            <button key={base.id} className="tg-basecard" onClick={() => onPick(base.id)}
-              style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 18, color: COLORS.text, font: "inherit" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                <Building2 size={18} color={COLORS.blue} />
-                <span style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 700 }}>Base {base.nome}</span>
+            <div key={base.id} className="tg-basecard" onClick={() => !manage && onPick(base.id)}
+              style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 14, padding: 18, color: COLORS.text, cursor: manage ? "default" : "pointer" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Building2 size={18} color={COLORS.blue} />
+                  <span style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 700 }}>Base {base.nome}</span>
+                </div>
+                {manage && (
+                  <button onClick={() => onEditBase(base)} style={{ background: COLORS.panelAlt, border: `1px solid ${COLORS.border}`, borderRadius: 6, padding: 5, color: COLORS.blue, cursor: "pointer" }}><Pencil size={13} /></button>
+                )}
               </div>
               <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: 3 }}>Gerente: <b style={{ color: COLORS.text }}>{base.gerente}</b></div>
               <div style={{ fontSize: 12.5, color: COLORS.faint, marginBottom: 14 }}>{base.cidades.join(" · ")}</div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12.5, color: COLORS.muted }}>
-                  <Users size={13} /> {clientes.length} clientes
-                </div>
-                {critico > 0 && (
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, background: COLORS.redSoft, color: COLORS.red, padding: "3px 8px", borderRadius: 20, fontSize: 11.5, fontWeight: 600 }}>
-                    <AlertOctagon size={11} /> {critico} crítico(s)
+              {!manage && (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12.5, color: COLORS.muted }}>
+                    <Users size={13} /> {clientes.length} clientes
                   </div>
-                )}
-              </div>
-            </button>
+                  {critico > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, background: COLORS.redSoft, color: COLORS.red, padding: "3px 8px", borderRadius: 20, fontSize: 11.5, fontWeight: 600 }}>
+                      <AlertOctagon size={11} /> {critico} crítico(s)
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           );
         })}
+        {manage && (
+          <button onClick={onAddBase} className="tg-basecard" style={{ background: "none", border: `1.5px dashed ${COLORS.border}`, borderRadius: 14, padding: 18, color: COLORS.blue, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}>
+            <Plus size={16} /> Nova base
+          </button>
+        )}
       </div>
     </div>
   );
@@ -569,7 +635,7 @@ function BaseSelectScreen({ enrichedAll, onPick, liveProps, onOpenAlerts }) {
 /* ---------------------------------------------------------------------
    TELA 2 — DASHBOARD (base ou cidade)
 --------------------------------------------------------------------- */
-function DashboardScreen({ base, city, setCity, scopeClients, allBaseClients, onIndicatorClick, onSeeAll, onDrillCity, ...topBarProps }) {
+function DashboardScreen({ base, city, setCity, scopeClients, allBaseClients, onIndicatorClick, onSeeAll, onDrillCity, onAddCidade, onDeleteCidade, ...topBarProps }) {
   const counts = useMemo(() => {
     const b = { ok: 0, atencao: 0, critico: 0, falha: 0, aproximando: 0 };
     scopeClients.forEach((c) => b[c.metrics.status]++);
@@ -596,11 +662,19 @@ function DashboardScreen({ base, city, setCity, scopeClients, allBaseClients, on
           border: `1px solid ${city === "all" ? COLORS.blue + "55" : COLORS.border}`, borderRadius: 20, padding: "6px 13px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
         }}>Todas as cidades</button>
         {base.cidades.map((cid) => (
-          <button key={cid} onClick={() => setCity(cid)} style={{
-            background: city === cid ? COLORS.blueSoft : COLORS.panel, color: city === cid ? COLORS.blue : COLORS.muted,
-            border: `1px solid ${city === cid ? COLORS.blue + "55" : COLORS.border}`, borderRadius: 20, padding: "6px 13px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
-          }}>{cid}</button>
+          <div key={cid} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+            <button onClick={() => setCity(cid)} style={{
+              background: city === cid ? COLORS.blueSoft : COLORS.panel, color: city === cid ? COLORS.blue : COLORS.muted,
+              border: `1px solid ${city === cid ? COLORS.blue + "55" : COLORS.border}`, borderRadius: 20, padding: "6px 13px", fontSize: 12.5, fontWeight: 600, cursor: "pointer",
+            }}>{cid}</button>
+            <button onClick={() => onDeleteCidade(cid)} title="Excluir cidade" style={{ background: "none", border: "none", color: COLORS.faint, cursor: "pointer", padding: 2 }}>
+              <X size={13} />
+            </button>
+          </div>
         ))}
+        <button onClick={onAddCidade} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: `1.5px dashed ${COLORS.border}`, color: COLORS.blue, borderRadius: 20, padding: "6px 13px", fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+          <Plus size={13} /> Cidade
+        </button>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: 10, marginBottom: 14 }}>
@@ -651,17 +725,24 @@ function DashboardScreen({ base, city, setCity, scopeClients, allBaseClients, on
 /* ---------------------------------------------------------------------
    TELA 3 — LISTA DE CLIENTES
 --------------------------------------------------------------------- */
-function ListScreen({ base, city, statusFilter, setStatusFilter, list, onOpenClient, ...topBarProps }) {
+function ListScreen({ base, city, statusFilter, setStatusFilter, list, onOpenClient, onAddCliente, ...topBarProps }) {
   const sorted = useMemo(() => [...list].sort((a, b) => STATUS_META[a.metrics.status].rank - STATUS_META[b.metrics.status].rank), [list]);
   const title = statusFilter ? `${STATUS_META[statusFilter].label} — ${city === "all" ? "todas as cidades" : city}` : `Clientes — ${city === "all" ? "todas as cidades" : city}`;
   return (
     <div style={{ maxWidth: 1080, margin: "0 auto", minWidth: 0 }}>
       <TopBar title={title} subtitle={`Base ${base.nome} · Gerente ${base.gerente} · ${sorted.length} cliente(s)`} {...topBarProps} />
-      {statusFilter && (
-        <button onClick={() => setStatusFilter(null)} style={{ background: "none", border: "none", color: COLORS.blue, fontSize: 12.5, textDecoration: "underline", cursor: "pointer", padding: 0, marginBottom: 12 }}>
-          limpar filtro de status
-        </button>
-      )}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, gap: 10, flexWrap: "wrap" }}>
+        {statusFilter ? (
+          <button onClick={() => setStatusFilter(null)} style={{ background: "none", border: "none", color: COLORS.blue, fontSize: 12.5, textDecoration: "underline", cursor: "pointer", padding: 0 }}>
+            limpar filtro de status
+          </button>
+        ) : <span />}
+        {city !== "all" && (
+          <button onClick={onAddCliente} style={{ display: "flex", alignItems: "center", gap: 5, background: COLORS.blueSoft, color: COLORS.blue, border: "none", borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            <Plus size={13} /> Novo cliente
+          </button>
+        )}
+      </div>
       <div style={{ background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 14, overflow: "hidden" }}>
         {sorted.length === 0 && <div style={{ padding: 24, textAlign: "center", color: COLORS.faint, fontSize: 13 }}>Nenhum cliente neste filtro.</div>}
         {sorted.map((c) => {
@@ -810,7 +891,7 @@ function AlertsScreen({ enrichedAll, onOpenClient, onBack, ...topBarProps }) {
   );
 }
 
-function DetailScreen({ client, globalTick, onBack }) {
+function DetailScreen({ client, globalTick, onBack, onExport, onEdit, onDelete }) {
   const metrics = useMemo(() => computeMetrics(client, globalTick), [client, globalTick]);
   const chartData = useMemo(() => buildChartData(client, metrics), [client, metrics]);
   const [periodDays, setPeriodDays] = useState(30);
@@ -830,9 +911,22 @@ function DetailScreen({ client, globalTick, onBack }) {
   const previsao = getPrevisao(client, metrics);
   return (
     <div style={{ maxWidth: 1080, margin: "0 auto", minWidth: 0 }}>
-      <button className="tg-btn" onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: COLORS.blue, fontSize: 12.5, cursor: "pointer", padding: 0, marginBottom: 14 }}>
-        <ChevronLeft size={15} /> Voltar para a lista
-      </button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <button className="tg-btn" onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 4, background: "none", border: "none", color: COLORS.blue, fontSize: 12.5, cursor: "pointer", padding: 0 }}>
+          <ChevronLeft size={15} /> Voltar para a lista
+        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="tg-btn" onClick={onEdit} style={{ display: "flex", alignItems: "center", gap: 5, background: COLORS.panelAlt, color: COLORS.muted, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            <Pencil size={12} /> Editar
+          </button>
+          <button className="tg-btn" onClick={onDelete} style={{ display: "flex", alignItems: "center", gap: 5, background: "none", color: COLORS.red, border: `1px solid ${COLORS.red}55`, borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            <Trash2 size={12} /> Excluir
+          </button>
+          <button className="tg-btn" onClick={onExport} style={{ display: "flex", alignItems: "center", gap: 5, background: COLORS.blueSoft, color: COLORS.blue, border: "none", borderRadius: 8, padding: "6px 11px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+            <FileSpreadsheet size={13} /> Excel
+          </button>
+        </div>
+      </div>
 
       <div style={{ marginBottom: 6 }}>
         <span style={{ background: meta.bg, color: meta.color, padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{meta.label}</span>
@@ -992,6 +1086,118 @@ function Stat({ label, value, sub, inline, valueFirst }) {
 /* ---------------------------------------------------------------------
    APP
 --------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   EXPORTAÇÃO EXCEL — 3 abas estilizadas: Bases, Cidades, Clientes
+--------------------------------------------------------------------- */
+const XLS_NAVY = "1B3A5C", XLS_NAVY_LIGHT = "2E5479", XLS_WHITE = "FFFFFF", XLS_BORDER = "D9DEE4";
+const XLS_STATUS_HEX = { critico: "E5545C", falha: "9A87E0", atencao: "E8A33D", aproximando: "5FBEDB", ok: "3FBF7F" };
+const XLS_THIN_BORDER = { top: { style: "thin", color: { rgb: XLS_BORDER } }, bottom: { style: "thin", color: { rgb: XLS_BORDER } }, left: { style: "thin", color: { rgb: XLS_BORDER } }, right: { style: "thin", color: { rgb: XLS_BORDER } } };
+
+function buildStyledSheet(contextLines, headers, dataRows, colWidths, statusColIndex) {
+  const numCols = headers.length;
+  const blankRow = Array(numCols).fill("");
+  const padRow = (first) => [first, ...Array(numCols - 1).fill("")];
+  const titleLines = ["CONSIGAZ", "Relatório de Telemetria GLP — Painel de Risco de Abastecimento", ...contextLines, `Gerado em: ${formatDate(new Date())} · ${dataRows.length} registro(s)`];
+  const aoa = [...titleLines.map(padRow), blankRow, headers, ...dataRows];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const headerRowIdx = titleLines.length + 1;
+
+  ws["!merges"] = titleLines.map((_, r) => ({ s: { r, c: 0 }, e: { r, c: numCols - 1 } }));
+  ws["!cols"] = colWidths.map((w) => ({ wch: w }));
+
+  const setCell = (r, c, style) => {
+    const addr = XLSX.utils.encode_cell({ r, c });
+    if (ws[addr]) ws[addr].s = { ...(ws[addr].s || {}), ...style };
+  };
+
+  for (let c = 0; c < numCols; c++) setCell(0, c, { font: { bold: true, sz: 18, color: { rgb: XLS_WHITE } }, fill: { fgColor: { rgb: XLS_NAVY } }, alignment: { horizontal: "center", vertical: "center" } });
+  for (let c = 0; c < numCols; c++) setCell(1, c, { font: { italic: true, sz: 11, color: { rgb: XLS_WHITE } }, fill: { fgColor: { rgb: XLS_NAVY_LIGHT } }, alignment: { horizontal: "center" } });
+  for (let r = 2; r < titleLines.length; r++) for (let c = 0; c < numCols; c++) setCell(r, c, { font: { bold: r !== titleLines.length - 1, sz: 11, color: { rgb: XLS_NAVY } }, alignment: { horizontal: "left" } });
+  for (let c = 0; c < numCols; c++) setCell(headerRowIdx, c, { font: { bold: true, sz: 10.5, color: { rgb: XLS_WHITE } }, fill: { fgColor: { rgb: XLS_NAVY } }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: XLS_THIN_BORDER });
+
+  dataRows.forEach((row, i) => {
+    const r = headerRowIdx + 1 + i;
+    const banding = i % 2 === 0 ? "FFFFFF" : "F1F4F8";
+    for (let c = 0; c < numCols; c++) setCell(r, c, { fill: { fgColor: { rgb: banding } }, border: XLS_THIN_BORDER, font: { sz: 10.5 }, alignment: { vertical: "center" } });
+    setCell(r, 0, { font: { bold: true, sz: 10.5 }, fill: { fgColor: { rgb: banding } }, border: XLS_THIN_BORDER, alignment: { vertical: "center" } });
+    if (statusColIndex != null) {
+      const hex = XLS_STATUS_HEX[row.__status];
+      if (hex) setCell(r, statusColIndex, { fill: { fgColor: { rgb: hex } }, font: { bold: true, sz: 10.5, color: { rgb: XLS_WHITE } }, border: XLS_THIN_BORDER, alignment: { horizontal: "center", vertical: "center" } });
+    }
+  });
+  return ws;
+}
+
+function makeNewClient({ baseId, baseNome, gerente, cidade, uf, nome, numB190, frequencia, diaSemana, endereco }) {
+  const limiteAprendido = 30;
+  const impliedDailyRate = (FULL_LEVEL - limiteAprendido) / FREQ_DIAS[frequencia];
+  const baseRatePerTick = +(impliedDailyRate / TICKS_PER_DAY).toFixed(3);
+  const cfg = {
+    behavior: "normal", baseRatePerTick, limiteAprendido, seedEnd: 45 + Math.random() * 20, freezeLastN: 0,
+    anomalyStartTick: 999999, failStartTick: 999999, resupplyTick: 999999,
+  };
+  const history = genSeed(cfg, Math.random);
+  const codigo = String(90000 + Math.floor(Math.random() * 9999));
+  const capacidadeKg = numB190 * 190;
+  const seedAbastecimento = { diasAtras: Math.max(1, Math.round(FREQ_DIAS[frequencia] * 0.3)), antesPct: 20, depoisPct: 78 };
+  return {
+    id: `custom-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    nome, codigo, baseId, baseNome, gerente, cidade, uf, endereco: endereco || `${cidade}/${uf}`,
+    numB190, capacidadeKg, seedAbastecimento, frequencia, diaSemana, config: cfg, history,
+  };
+}
+
+function exportWorkbook(scopeClients, contextLines, filenameHint) {
+  const wb = XLSX.utils.book_new();
+
+  // ABA 1 — BASES
+  const baseGroups = {};
+  scopeClients.forEach((c) => {
+    if (!baseGroups[c.baseId]) baseGroups[c.baseId] = { nome: c.baseNome, gerente: c.gerente, cidades: new Set(), total: 0, critico: 0, atencao: 0, aproximando: 0, falha: 0, ok: 0 };
+    const g = baseGroups[c.baseId];
+    g.cidades.add(c.cidade); g.total++; g[c.metrics.status]++;
+  });
+  const basesRows = Object.values(baseGroups).map((g) => [g.nome, g.gerente, g.cidades.size, g.total, g.critico, g.atencao, g.aproximando, g.falha, g.ok]);
+  const wsBases = buildStyledSheet(contextLines, ["Base", "Gerente", "Cidades atendidas", "Total clientes", "Crítico", "Atenção", "Aproximando", "Sem sinal", "Normal"],
+    basesRows, [22, 16, 16, 14, 10, 10, 12, 11, 10], null);
+  XLSX.utils.book_append_sheet(wb, wsBases, "Bases");
+
+  // ABA 2 — CIDADES
+  const cidadeGroups = {};
+  scopeClients.forEach((c) => {
+    const key = c.baseId + "|" + c.cidade;
+    if (!cidadeGroups[key]) cidadeGroups[key] = { base: c.baseNome, cidade: c.cidade, total: 0, critico: 0, atencao: 0, aproximando: 0, falha: 0, ok: 0 };
+    const g = cidadeGroups[key];
+    g.total++; g[c.metrics.status]++;
+  });
+  const cidadesRows = Object.values(cidadeGroups).map((g) => [g.base, g.cidade, g.total, g.critico, g.atencao, g.aproximando, g.falha, g.ok]);
+  const wsCidades = buildStyledSheet(contextLines, ["Base", "Cidade", "Total clientes", "Crítico", "Atenção", "Aproximando", "Sem sinal", "Normal"],
+    cidadesRows, [20, 20, 14, 10, 10, 12, 11, 10], null);
+  XLSX.utils.book_append_sheet(wb, wsCidades, "Cidades");
+
+  // ABA 3 — CLIENTES
+  const clientesHeaders = ["Cliente", "Código", "Cidade", "Status", "Nível atual (%)", "Limite aprendido (%)",
+    "Taxa de consumo (%/dia)", "Dias até o limite", "Próximo abastecimento", "Última leitura",
+    "Frequência", "Dia da rota", "B-190", "Endereço", "Motivo"];
+  const clientesRows = scopeClients.map((c) => {
+    const m = c.metrics, previsao = getPrevisao(c, m);
+    const row = [
+      c.nome, c.codigo, c.cidade, STATUS_META[m.status].label,
+      m.semSinal ? "—" : m.nivelAtual, c.config.limiteAprendido,
+      +m.taxaDiaria.toFixed(2), isFinite(m.diasEstimados) ? +m.diasEstimados.toFixed(1) : "—",
+      previsao.label, formatTickLabel(m.lastTick), FREQ_LABELS[c.frequencia], c.diaSemana,
+      c.numB190, c.endereco, m.motivo,
+    ];
+    row.__status = m.status;
+    return row;
+  });
+  const wsClientes = buildStyledSheet(contextLines, clientesHeaders, clientesRows,
+    [28, 10, 16, 12, 13, 14, 15, 13, 18, 20, 14, 14, 8, 34, 42], 3);
+  XLSX.utils.book_append_sheet(wb, wsClientes, "Clientes");
+
+  XLSX.writeFile(wb, `telemetria_glp_${String(filenameHint).replace(/\s/g, "_")}_${formatDate(new Date()).replace(/\//g, "-")}.xlsx`);
+}
+
 export default function TelemetriaSimulador() {
   const [clients, setClients] = useState(() => generateClients());
   const [globalTick, setGlobalTick] = useState(SEED_LEN - 1);
@@ -1005,6 +1211,8 @@ export default function TelemetriaSimulador() {
   const [city, setCity] = useState("all");
   const [statusFilter, setStatusFilter] = useState(null);
   const [clientId, setClientId] = useState(null);
+  const [bases, setBases] = useState(() => BASES.map((b) => ({ ...b, cidades: [...b.cidades] })));
+  const [modal, setModal] = useState(null);
 
   const tick = useCallback(() => {
     setGlobalTick((prev) => {
@@ -1019,6 +1227,46 @@ export default function TelemetriaSimulador() {
     return () => clearInterval(intervalRef.current);
   }, [running, speedSec, tick]);
 
+  const addBase = useCallback(({ nome, gerente, cidade }) => {
+    const id = `custom-${Date.now()}`;
+    setBases((prev) => [...prev, { id, nome, gerente, uf: "PR", cidades: [cidade] }]);
+  }, []);
+  const updateBase = useCallback((baseIdArg, { nome, gerente }) => {
+    setBases((prev) => prev.map((b) => (b.id === baseIdArg ? { ...b, nome, gerente } : b)));
+    setClients((prev) => prev.map((c) => (c.baseId === baseIdArg ? { ...c, baseNome: nome, gerente } : c)));
+  }, []);
+  const deleteBase = useCallback((baseIdArg) => {
+    setBases((prev) => prev.filter((b) => b.id !== baseIdArg));
+    setClients((prev) => prev.filter((c) => c.baseId !== baseIdArg));
+  }, []);
+  const addCidade = useCallback((baseIdArg, cidadeNome) => {
+    setBases((prev) => prev.map((b) => (b.id === baseIdArg ? { ...b, cidades: [...b.cidades, cidadeNome] } : b)));
+  }, []);
+  const deleteCidade = useCallback((baseIdArg, cidadeNome) => {
+    setBases((prev) => prev.map((b) => (b.id === baseIdArg ? { ...b, cidades: b.cidades.filter((c) => c !== cidadeNome) } : b)));
+    setClients((prev) => prev.filter((c) => !(c.baseId === baseIdArg && c.cidade === cidadeNome)));
+  }, []);
+  const addCliente = useCallback((baseIdArg, cidade, formData) => {
+    const b = bases.find((x) => x.id === baseIdArg);
+    if (!b) return;
+    setClients((prev) => [...prev, makeNewClient({ baseId: baseIdArg, baseNome: b.nome, gerente: b.gerente, cidade, uf: b.uf, ...formData })]);
+  }, [bases]);
+  const updateCliente = useCallback((clientIdArg, formData) => {
+    setClients((prev) => prev.map((c) => {
+      if (c.id !== clientIdArg) return c;
+      const impliedDailyRate = (FULL_LEVEL - c.config.limiteAprendido) / FREQ_DIAS[formData.frequencia];
+      const baseRatePerTick = +(impliedDailyRate / TICKS_PER_DAY).toFixed(3);
+      return {
+        ...c, nome: formData.nome, numB190: formData.numB190, capacidadeKg: formData.numB190 * 190,
+        endereco: formData.endereco, frequencia: formData.frequencia, diaSemana: formData.diaSemana,
+        config: { ...c.config, baseRatePerTick },
+      };
+    }));
+  }, []);
+  const deleteCliente = useCallback((clientIdArg) => {
+    setClients((prev) => prev.filter((c) => c.id !== clientIdArg));
+  }, []);
+
   const enrichedAll = useMemo(() => clients.map((c) => ({ ...c, metrics: computeMetrics(c, globalTick) })), [clients, globalTick]);
 
   const globalCounts = useMemo(() => {
@@ -1027,7 +1275,7 @@ export default function TelemetriaSimulador() {
     return b;
   }, [enrichedAll]);
 
-  const base = BASES.find((b) => b.id === baseId) || null;
+  const base = bases.find((b) => b.id === baseId) || null;
   const baseClients = useMemo(() => (base ? enrichedAll.filter((c) => c.baseId === base.id) : []), [base, enrichedAll]);
   const scopeClients = useMemo(() => (city === "all" ? baseClients : baseClients.filter((c) => c.cidade === city)), [baseClients, city]);
   const listClients = useMemo(() => (statusFilter ? scopeClients.filter((c) => c.metrics.status === statusFilter) : scopeClients), [scopeClients, statusFilter]);
@@ -1037,69 +1285,15 @@ export default function TelemetriaSimulador() {
     : view === "alerts" ? enrichedAll.filter((c) => c.metrics.status === "critico" || c.metrics.status === "atencao")
     : scopeClients;
   const handleExport = useCallback(() => {
-    const headers = [
-      "Cliente", "Código", "Cidade", "Status", "Nível atual (%)", "Limite aprendido (%)",
-      "Taxa de consumo (%/dia)", "Dias até o limite", "Próximo abastecimento", "Última leitura",
-      "Frequência", "Dia da rota", "B-190", "Endereço", "Motivo",
-    ];
-    const numCols = headers.length;
-    const blankRow = Array(numCols).fill("");
-    const padRow = (first) => [first, ...Array(numCols - 1).fill("")];
-
-    const dataRows = exportScope.map((c) => {
-      const m = c.metrics, previsao = getPrevisao(c, m);
-      return [
-        c.nome, c.codigo, c.cidade, STATUS_META[m.status].label,
-        m.semSinal ? "—" : m.nivelAtual, c.config.limiteAprendido,
-        +m.taxaDiaria.toFixed(2), isFinite(m.diasEstimados) ? +m.diasEstimados.toFixed(1) : "—",
-        previsao.label, formatTickLabel(m.lastTick), FREQ_LABELS[c.frequencia], c.diaSemana,
-        c.numB190, c.endereco, m.motivo,
-      ];
-    });
-
-    const aoa = [
-      padRow("CONSIGAZ"),
-      padRow("Relatório de Telemetria GLP — Painel de Risco de Abastecimento"),
-      padRow(`Base: ${base ? base.nome : "Todas as bases"}`),
-      padRow(`Cidade: ${city === "all" ? "Todas as cidades" : city}`),
-      padRow(`Gerado em: ${formatDate(new Date())} · ${exportScope.length} cliente(s)`),
-      blankRow,
-      headers,
-      ...dataRows,
-    ];
-
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!merges"] = [0, 1, 2, 3, 4].map((r) => ({ s: { r, c: 0 }, e: { r, c: numCols - 1 } }));
-    ws["!cols"] = [{ wch: 28 }, { wch: 10 }, { wch: 16 }, { wch: 12 }, { wch: 13 }, { wch: 14 },
-      { wch: 15 }, { wch: 13 }, { wch: 18 }, { wch: 20 }, { wch: 14 }, { wch: 14 }, { wch: 8 }, { wch: 34 }, { wch: 42 }];
-
-    const NAVY = "1B3A5C", NAVY_LIGHT = "2E5479", WHITE = "FFFFFF", BORDER = "D9DEE4";
-    const STATUS_HEX = { critico: "E5545C", falha: "9A87E0", atencao: "E8A33D", ok: "3FBF7F" };
-    const thinBorder = { top: { style: "thin", color: { rgb: BORDER } }, bottom: { style: "thin", color: { rgb: BORDER } }, left: { style: "thin", color: { rgb: BORDER } }, right: { style: "thin", color: { rgb: BORDER } } };
-    const setCell = (r, c, style) => {
-      const addr = XLSX.utils.encode_cell({ r, c });
-      if (ws[addr]) ws[addr].s = { ...(ws[addr].s || {}), ...style };
-    };
-
-    for (let c = 0; c < numCols; c++) setCell(0, c, { font: { bold: true, sz: 20, color: { rgb: WHITE } }, fill: { fgColor: { rgb: NAVY } }, alignment: { horizontal: "center", vertical: "center" } });
-    for (let c = 0; c < numCols; c++) setCell(1, c, { font: { italic: true, sz: 11, color: { rgb: WHITE } }, fill: { fgColor: { rgb: NAVY_LIGHT } }, alignment: { horizontal: "center" } });
-    for (const r of [2, 3, 4]) for (let c = 0; c < numCols; c++) setCell(r, c, { font: { bold: r !== 4, sz: 11, color: { rgb: NAVY } }, alignment: { horizontal: "left" } });
-
-    for (let c = 0; c < numCols; c++) setCell(6, c, { font: { bold: true, sz: 10.5, color: { rgb: WHITE } }, fill: { fgColor: { rgb: NAVY } }, alignment: { horizontal: "center", vertical: "center", wrapText: true }, border: thinBorder });
-
-    dataRows.forEach((_, i) => {
-      const r = 7 + i;
-      const banding = i % 2 === 0 ? "FFFFFF" : "F1F4F8";
-      for (let c = 0; c < numCols; c++) setCell(r, c, { fill: { fgColor: { rgb: banding } }, border: thinBorder, font: { sz: 10.5 }, alignment: { vertical: "center" } });
-      const statusHex = STATUS_HEX[exportScope[i].metrics.status];
-      setCell(r, 3, { fill: { fgColor: { rgb: statusHex } }, font: { bold: true, sz: 10.5, color: { rgb: WHITE } }, border: thinBorder, alignment: { horizontal: "center", vertical: "center" } });
-      setCell(r, 0, { font: { bold: true, sz: 10.5 }, fill: { fgColor: { rgb: banding } }, border: thinBorder, alignment: { vertical: "center" } });
-    });
-
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Resumo");
-    XLSX.writeFile(wb, `telemetria_glp_${(base?.nome || "todas").replace(/\s/g, "_")}_${formatDate(new Date()).replace(/\//g, "-")}.xlsx`);
+    exportWorkbook(exportScope, [
+      `Base: ${base ? base.nome : "Todas as bases"}`,
+      `Cidade: ${city === "all" ? "Todas as cidades" : city}`,
+    ], (base?.nome || "todas"));
   }, [exportScope, base, city]);
+
+  const handleExportClient = useCallback((client) => {
+    exportWorkbook([client], [`Cliente: ${client.nome}`, `Base: ${client.baseNome} · Cidade: ${client.cidade}`], client.codigo);
+  }, []);
 
   const topBarProps = { running, setRunning, speedSec, setSpeedSec, tick, globalTick, onExport: handleExport };
 
@@ -1109,10 +1303,13 @@ export default function TelemetriaSimulador() {
 
       {view === "baseSelect" && (
         <BaseSelectScreen
+          bases={bases}
           enrichedAll={enrichedAll}
           onPick={(id) => { setBaseId(id); setCity("all"); setStatusFilter(null); setView("dashboard"); }}
           liveProps={{ counts: globalCounts, total: enrichedAll.length, running, setRunning, speedSec, setSpeedSec, globalTick }}
           onOpenAlerts={() => setView("alerts")}
+          onAddBase={() => setModal({ type: "base-add" })}
+          onEditBase={(b) => setModal({ type: "base-edit", base: b })}
         />
       )}
 
@@ -1124,6 +1321,8 @@ export default function TelemetriaSimulador() {
           onSeeAll={() => { setStatusFilter(null); setView("list"); }}
           onDrillCity={(cid) => setCity(cid)}
           onBack={() => setView("baseSelect")}
+          onAddCidade={() => setModal({ type: "cidade-add", baseId: base.id })}
+          onDeleteCidade={(cid) => setModal({ type: "cidade-delete", baseId: base.id, cidade: cid })}
           {...topBarProps}
         />
       )}
@@ -1133,6 +1332,7 @@ export default function TelemetriaSimulador() {
           base={base} city={city} statusFilter={statusFilter} setStatusFilter={setStatusFilter}
           list={listClients} onOpenClient={(id) => { setClientId(id); setReturnView("list"); setView("detail"); }}
           onBack={() => setView("dashboard")}
+          onAddCliente={() => setModal({ type: "cliente-add", baseId: base.id, cidade: city })}
           {...topBarProps}
         />
       )}
@@ -1147,7 +1347,74 @@ export default function TelemetriaSimulador() {
       )}
 
       {view === "detail" && selectedClient && (
-        <DetailScreen client={selectedClient} globalTick={globalTick} onBack={() => setView(returnView)} />
+        <DetailScreen
+          client={selectedClient} globalTick={globalTick} onBack={() => setView(returnView)}
+          onExport={() => handleExportClient(selectedClient)}
+          onEdit={() => setModal({ type: "cliente-edit", client: selectedClient })}
+          onDelete={() => setModal({ type: "cliente-delete", client: selectedClient })}
+        />
+      )}
+
+      {modal?.type === "base-add" && (
+        <FormModal title="Nova base" initial={{ nome: "", gerente: "", cidade: "" }}
+          fields={[{ key: "nome", label: "Nome da base" }, { key: "gerente", label: "Gerente responsável" }, { key: "cidade", label: "Primeira cidade" }]}
+          onCancel={() => setModal(null)}
+          onSave={(vals) => { if (vals.nome && vals.gerente && vals.cidade) { addBase(vals); setModal(null); } }} />
+      )}
+      {modal?.type === "base-edit" && (
+        <FormModal title={`Editar ${modal.base.nome}`} initial={{ nome: modal.base.nome, gerente: modal.base.gerente }}
+          fields={[{ key: "nome", label: "Nome da base" }, { key: "gerente", label: "Gerente responsável" }]}
+          onCancel={() => setModal(null)}
+          onSave={(vals) => { updateBase(modal.base.id, vals); setModal(null); }}
+          onDelete={() => { if (window.confirm(`Excluir a base ${modal.base.nome}? Isso remove todos os clientes dela também.`)) { deleteBase(modal.base.id); setModal(null); } }}
+          deleteLabel="Excluir base" />
+      )}
+      {modal?.type === "cidade-add" && (
+        <FormModal title="Nova cidade" initial={{ cidade: "" }}
+          fields={[{ key: "cidade", label: "Nome da cidade" }]}
+          onCancel={() => setModal(null)}
+          onSave={(vals) => { if (vals.cidade) { addCidade(modal.baseId, vals.cidade); setModal(null); } }} />
+      )}
+      {modal?.type === "cidade-delete" && (
+        <FormModal title={`Excluir ${modal.cidade}?`} initial={{}} fields={[]}
+          onCancel={() => setModal(null)}
+          onSave={() => setModal(null)}
+          onDelete={() => { deleteCidade(modal.baseId, modal.cidade); setCity("all"); setModal(null); }}
+          deleteLabel="Confirmar exclusão (remove os clientes dessa cidade)" />
+      )}
+      {modal?.type === "cliente-add" && (
+        <FormModal title="Novo cliente" initial={{ nome: "", numB190: 2, frequencia: "mensal", diaSemana: "Segunda-feira", endereco: "" }}
+          fields={[
+            { key: "nome", label: "Nome do cliente" },
+            { key: "numB190", label: "Quantidade de B-190", type: "number", min: 1, max: 6 },
+            { key: "frequencia", label: "Frequência de rota", type: "select", options: FREQUENCIAS.map((f) => ({ value: f, label: FREQ_LABELS[f] })) },
+            { key: "diaSemana", label: "Dia da rota", type: "select", options: DIAS_SEMANA.map((d) => ({ value: d, label: d })) },
+            { key: "endereco", label: "Endereço" },
+          ]}
+          onCancel={() => setModal(null)}
+          onSave={(vals) => { if (vals.nome) { addCliente(modal.baseId, modal.cidade, vals); setModal(null); } }} />
+      )}
+      {modal?.type === "cliente-edit" && (
+        <FormModal title={`Editar ${modal.client.nome}`}
+          initial={{ nome: modal.client.nome, numB190: modal.client.numB190, frequencia: modal.client.frequencia, diaSemana: modal.client.diaSemana, endereco: modal.client.endereco }}
+          fields={[
+            { key: "nome", label: "Nome do cliente" },
+            { key: "numB190", label: "Quantidade de B-190", type: "number", min: 1, max: 6 },
+            { key: "frequencia", label: "Frequência de rota", type: "select", options: FREQUENCIAS.map((f) => ({ value: f, label: FREQ_LABELS[f] })) },
+            { key: "diaSemana", label: "Dia da rota", type: "select", options: DIAS_SEMANA.map((d) => ({ value: d, label: d })) },
+            { key: "endereco", label: "Endereço" },
+          ]}
+          onCancel={() => setModal(null)}
+          onSave={(vals) => { updateCliente(modal.client.id, vals); setModal(null); }}
+          onDelete={() => { if (window.confirm(`Excluir o cliente ${modal.client.nome}?`)) { deleteCliente(modal.client.id); setModal(null); setView("list"); } }}
+          deleteLabel="Excluir cliente" />
+      )}
+      {modal?.type === "cliente-delete" && (
+        <FormModal title={`Excluir ${modal.client.nome}?`} initial={{}} fields={[]}
+          onCancel={() => setModal(null)}
+          onSave={() => setModal(null)}
+          onDelete={() => { deleteCliente(modal.client.id); setModal(null); setView("list"); }}
+          deleteLabel="Confirmar exclusão" />
       )}
     </div>
   );

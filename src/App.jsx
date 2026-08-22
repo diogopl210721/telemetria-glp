@@ -111,7 +111,17 @@ function generateClients() {
         const behavior = BEHAVIOR_PATTERN[i];
         const numB190 = NUMB190_PATTERN[i];
         const limiteAprendido = behavior === "mal_dimensionado" ? 50 : 30;
-        const baseRatePerTick = +(1.2 + rng() * 1.0).toFixed(2);
+        const frequencia = FREQUENCIAS[Math.floor(rng() * FREQUENCIAS.length)];
+        const diaSemana = DIAS_SEMANA[Math.floor(rng() * DIAS_SEMANA.length)];
+
+        // taxa de consumo derivada da frequência contratada — trimestral tem que se comportar como trimestral,
+        // semanal tem que se comportar como semanal. Só o "mal dimensionado" foge disso de propósito
+        // (é exatamente esse descompasso que justifica a revisão com o consultor).
+        const impliedDailyRate = (FULL_LEVEL - limiteAprendido) / FREQ_DIAS[frequencia];
+        let baseRatePerTick = (impliedDailyRate / TICKS_PER_DAY) * (0.9 + rng() * 0.2);
+        if (behavior === "mal_dimensionado") baseRatePerTick *= 2.2 + rng() * 0.8;
+        baseRatePerTick = +baseRatePerTick.toFixed(3);
+
         const seedEnd = behavior === "recem_abastecido" ? 22 + rng() * 6 : 38 + rng() * 28;
         const freezeLastN = behavior === "sensor_travado" ? 6 : 0;
         const offset = i % 5;
@@ -135,8 +145,6 @@ function generateClients() {
           antesPct: +(14 + rng() * 10).toFixed(1),
           depoisPct: +(74 + rng() * 6).toFixed(1),
         };
-        const frequencia = FREQUENCIAS[Math.floor(rng() * FREQUENCIAS.length)];
-        const diaSemana = DIAS_SEMANA[Math.floor(rng() * DIAS_SEMANA.length)];
 
         let history = behavior === "mal_dimensionado" ? genSeedSawtooth(cfg, rng) : genSeed(cfg, rng);
         if (behavior === "falha_sinal" && rng() < 0.55) {

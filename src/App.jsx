@@ -315,12 +315,13 @@ function getAbastecimento(client, metrics) {
   if (metrics.resupplyEvents.length > 0) {
     const idx = metrics.resupplyEvents[metrics.resupplyEvents.length - 1];
     const antesPct = client.history[idx - 1].nivel, depoisPct = client.history[idx].nivel;
-    return { quando: formatTickLabel(client.history[idx].tick), antesPct, depoisPct, detectadoAoVivo: true };
+    const d = tickToDate(client.history[idx].tick);
+    return { quando: formatTickLabel(client.history[idx].tick), dataSimples: formatDate(d), antesPct, depoisPct, detectadoAoVivo: true };
   }
   const s = client.seedAbastecimento;
   const d = new Date(TODAY);
   d.setDate(d.getDate() - s.diasAtras);
-  return { quando: `${formatDate(d)} (há ${s.diasAtras} dias)`, antesPct: s.antesPct, depoisPct: s.depoisPct, detectadoAoVivo: false };
+  return { quando: `${formatDate(d)} (há ${s.diasAtras} dias)`, dataSimples: formatDate(d), antesPct: s.antesPct, depoisPct: s.depoisPct, detectadoAoVivo: false };
 }
 
 const STATUS_META = {
@@ -1041,8 +1042,8 @@ function DetailScreen({ client, globalTick, onBack, onExport, onEdit, onDelete }
             <Stat label="Taxa de consumo" value={`${metrics.taxaDiaria.toFixed(1)}%/dia`} sub={`≈ ${consumoKgDia.toFixed(1)} kg/dia`} />
             <Stat label="Dias até o limite" value={isFinite(metrics.diasEstimados) ? metrics.diasEstimados.toFixed(1) : "—"} />
             <Stat label="Leituras recebidas" value={client.history.length} />
-            <Stat label="Última leitura" value={formatTickLabel(metrics.lastTick)} />
-            <Stat label="Último abastecimento" value={abast.quando} />
+            <Stat label="Última leitura" value={formatDate(tickToDate(metrics.lastTick))} />
+            <Stat label="Último abastecimento" value={abast.dataSimples} />
           </div>
 
           <div style={{ marginTop: 16, background: COLORS.panel, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "14px 16px" }}>

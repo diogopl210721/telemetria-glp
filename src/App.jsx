@@ -934,10 +934,7 @@ function DetailScreen({ client, globalTick, onBack, onExport, onEdit, onDelete }
         </div>
       </div>
 
-      <div style={{ marginBottom: 6 }}>
-        <span style={{ background: meta.bg, color: meta.color, padding: "3px 10px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{meta.label}</span>
-      </div>
-      <h1 style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, margin: "4px 0 2px", color: COLORS.text, wordBreak: "break-word" }}>{client.nome}</h1>
+      <h1 style={{ fontFamily: "var(--font-display)", fontSize: 22, fontWeight: 700, margin: "10px 0 2px", color: COLORS.text, wordBreak: "break-word" }}>{client.nome}</h1>
       <div style={{ fontSize: 12.5, color: COLORS.muted, marginBottom: 4, display: "flex", flexWrap: "wrap", gap: 10 }}>
         <span style={{ fontFamily: "var(--font-mono)" }}>Cod: {client.codigo}</span>
         <span>Cidade: <b style={{ color: COLORS.text }}>{client.cidade}</b></span>

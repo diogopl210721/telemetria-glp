@@ -992,7 +992,7 @@ function DetailScreen({ client, globalTick, onBack, onExport, onEdit, onDelete }
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 12.5, color: COLORS.muted, marginBottom: 10 }}>{metrics.motivo}</div>
 
-          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 6, flexWrap: "wrap", alignItems: "center" }}>
             {[{ label: "7d", v: 7 }, { label: "30d", v: 30 }, { label: "90d", v: 90 }, { label: "Tudo", v: null }].map((opt) => (
               <button key={opt.label} onClick={() => setPeriodDays(opt.v)} style={{
                 background: periodDays === opt.v ? COLORS.blueSoft : COLORS.panelAlt,
@@ -1001,6 +1001,9 @@ function DetailScreen({ client, globalTick, onBack, onExport, onEdit, onDelete }
                 borderRadius: 8, padding: "4px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer",
               }}>{opt.label}</button>
             ))}
+            <span style={{ fontSize: 10.5, color: COLORS.faint, marginLeft: 4 }}>
+              {filteredChartData.filter((p) => p.nivel != null).length} de {chartData.filter((p) => p.nivel != null).length} leituras exibidas
+            </span>
           </div>
           <div style={{ height: 190, minWidth: 0 }}>
             <ResponsiveContainer width="100%" height="100%">

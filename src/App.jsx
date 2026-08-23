@@ -1157,50 +1157,72 @@ function makeNewClient({ baseId, baseNome, gerente, cidade, uf, nome, numB190, f
 function exportWorkbook(scopeClients, contextLines, filenameHint) {
   const wb = XLSX.utils.book_new();
 
-  // ABA 1 — BASES
+  // ABA 1 — BASES (dados e métricas agregadas por base)
   const baseGroups = {};
   scopeClients.forEach((c) => {
-    if (!baseGroups[c.baseId]) baseGroups[c.baseId] = { nome: c.baseNome, gerente: c.gerente, cidades: new Set(), total: 0, critico: 0, atencao: 0, aproximando: 0, falha: 0, ok: 0 };
+    if (!baseGroups[c.baseId]) baseGroups[c.baseId] = { nome: c.baseNome, gerente: c.gerente, cidades: new Set(), total: 0, critico: 0, atencao: 0, aproximando: 0, falha: 0, ok: 0, capacidadeKg: 0, taxaSoma: 0, leituras: 0 };
     const g = baseGroups[c.baseId];
     g.cidades.add(c.cidade); g.total++; g[c.metrics.status]++;
+    g.capacidadeKg += c.capacidadeKg; g.taxaSoma += c.metrics.taxaDiaria; g.leituras += c.history.length;
   });
-  const basesRows = Object.values(baseGroups).map((g) => [g.nome, g.gerente, g.cidades.size, g.total, g.critico, g.atencao, g.aproximando, g.falha, g.ok]);
-  const wsBases = buildStyledSheet(contextLines, ["Base", "Gerente", "Cidades atendidas", "Total clientes", "Crítico", "Atenção", "Aproximando", "Sem sinal", "Normal"],
-    basesRows, [22, 16, 16, 14, 10, 10, 12, 11, 10], null);
+  const basesRows = Object.values(baseGroups).map((g) => [
+    g.nome, g.gerente, g.cidades.size, g.total, g.critico, g.atencao, g.aproximando, g.falha, g.ok,
+    g.capacidadeKg, +(g.taxaSoma / g.total).toFixed(2), g.leituras,
+  ]);
+  const wsBases = buildStyledSheet(contextLines,
+    ["Base", "Gerente", "Cidades atendidas", "Total clientes", "Crítico", "Atenção", "Aproximando", "Sem sinal", "Normal", "Capacidade total (kg)", "Consumo médio (%/dia)", "Total de leituras"],
+    basesRows, [22, 16, 16, 14, 10, 10, 12, 11, 10, 18, 18, 14], null);
   XLSX.utils.book_append_sheet(wb, wsBases, "Bases");
 
-  // ABA 2 — CIDADES
+  // ABA 2 — CIDADES (dados e métricas agregadas por cidade)
   const cidadeGroups = {};
   scopeClients.forEach((c) => {
     const key = c.baseId + "|" + c.cidade;
-    if (!cidadeGroups[key]) cidadeGroups[key] = { base: c.baseNome, cidade: c.cidade, total: 0, critico: 0, atencao: 0, aproximando: 0, falha: 0, ok: 0 };
+    if (!cidadeGroups[key]) cidadeGroups[key] = { base: c.baseNome, cidade: c.cidade, total: 0, critico: 0, atencao: 0, aproximando: 0, falha: 0, ok: 0, capacidadeKg: 0, taxaSoma: 0, leituras: 0 };
     const g = cidadeGroups[key];
     g.total++; g[c.metrics.status]++;
+    g.capacidadeKg += c.capacidadeKg; g.taxaSoma += c.metrics.taxaDiaria; g.leituras += c.history.length;
   });
-  const cidadesRows = Object.values(cidadeGroups).map((g) => [g.base, g.cidade, g.total, g.critico, g.atencao, g.aproximando, g.falha, g.ok]);
-  const wsCidades = buildStyledSheet(contextLines, ["Base", "Cidade", "Total clientes", "Crítico", "Atenção", "Aproximando", "Sem sinal", "Normal"],
-    cidadesRows, [20, 20, 14, 10, 10, 12, 11, 10], null);
+  const cidadesRows = Object.values(cidadeGroups).map((g) => [
+    g.base, g.cidade, g.total, g.critico, g.atencao, g.aproximando, g.falha, g.ok,
+    g.capacidadeKg, +(g.taxaSoma / g.total).toFixed(2), g.leituras,
+  ]);
+  const wsCidades = buildStyledSheet(contextLines,
+    ["Base", "Cidade", "Total clientes", "Crítico", "Atenção", "Aproximando", "Sem sinal", "Normal", "Capacidade total (kg)", "Consumo médio (%/dia)", "Total de leituras"],
+    cidadesRows, [20, 20, 14, 10, 10, 12, 11, 10, 18, 18, 14], null);
   XLSX.utils.book_append_sheet(wb, wsCidades, "Cidades");
 
-  // ABA 3 — CLIENTES
-  const clientesHeaders = ["Cliente", "Código", "Cidade", "Status", "Nível atual (%)", "Limite aprendido (%)",
-    "Taxa de consumo (%/dia)", "Dias até o limite", "Próximo abastecimento", "Última leitura",
-    "Frequência", "Dia da rota", "B-190", "Endereço", "Motivo"];
+  // ABA 3 — CLIENTES (todos os dados e métricas de cada cliente)
+  const clientesHeaders = ["Cliente", "Código", "Cidade", "Base", "Gerente", "Status", "Nível atual (%)", "Limite aprendido (%)",
+    "Taxa de consumo (%/dia)", "Taxa de consumo (kg/dia)", "Dias até o limite", "Próximo abastecimento", "Última leitura",
+    "Total de leituras", "Frequência", "Dia da rota", "B-190", "Capacidade (kg)", "Endereço", "Motivo"];
   const clientesRows = scopeClients.map((c) => {
     const m = c.metrics, previsao = getPrevisao(c, m);
     const row = [
-      c.nome, c.codigo, c.cidade, STATUS_META[m.status].label,
+      c.nome, c.codigo, c.cidade, c.baseNome, c.gerente, STATUS_META[m.status].label,
       m.semSinal ? "—" : m.nivelAtual, c.config.limiteAprendido,
-      +m.taxaDiaria.toFixed(2), isFinite(m.diasEstimados) ? +m.diasEstimados.toFixed(1) : "—",
-      previsao.label, formatTickLabel(m.lastTick), FREQ_LABELS[c.frequencia], c.diaSemana,
-      c.numB190, c.endereco, m.motivo,
+      +m.taxaDiaria.toFixed(2), +((m.taxaDiaria / 100) * c.capacidadeKg).toFixed(1),
+      isFinite(m.diasEstimados) ? +m.diasEstimados.toFixed(1) : "—",
+      previsao.label, formatDate(tickToDate(m.lastTick)), c.history.length,
+      FREQ_LABELS[c.frequencia], c.diaSemana, c.numB190, c.capacidadeKg, c.endereco, m.motivo,
     ];
     row.__status = m.status;
     return row;
   });
   const wsClientes = buildStyledSheet(contextLines, clientesHeaders, clientesRows,
-    [28, 10, 16, 12, 13, 14, 15, 13, 18, 20, 14, 14, 8, 34, 42], 3);
+    [28, 10, 16, 18, 14, 12, 13, 14, 15, 15, 13, 18, 14, 12, 14, 14, 8, 14, 34, 42], 5);
   XLSX.utils.book_append_sheet(wb, wsClientes, "Clientes");
+
+  // ABA 4 — LEITURAS (histórico bruto de cada leitura, de cada cliente)
+  const leiturasHeaders = ["Cliente", "Código", "Data", "Período", "Nível (%)"];
+  const leiturasRows = [];
+  scopeClients.forEach((c) => {
+    c.history.forEach((p) => {
+      leiturasRows.push([c.nome, c.codigo, formatDate(tickToDate(p.tick)), p.tick % 2 === 0 ? "Manhã" : "Tarde", p.nivel]);
+    });
+  });
+  const wsLeituras = buildStyledSheet(contextLines, leiturasHeaders, leiturasRows, [28, 10, 14, 10, 12], null);
+  XLSX.utils.book_append_sheet(wb, wsLeituras, "Leituras");
 
   XLSX.writeFile(wb, `telemetria_glp_${String(filenameHint).replace(/\s/g, "_")}_${formatDate(new Date()).replace(/\//g, "-")}.xlsx`);
 }

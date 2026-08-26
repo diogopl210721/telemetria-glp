@@ -947,9 +947,12 @@ function AlertsScreen({ enrichedAll, onOpenClient, onBack, ...topBarProps }) {
               <ChevronRight size={16} color={COLORS.muted} />
             </div>
             <div style={{ fontSize: 11.5, color: COLORS.purple, marginTop: 6, marginBottom: 10 }}>{c.metrics.motivoRevisao}</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: COLORS.muted, marginBottom: 6 }}>
-              <MessageCircle size={12} color={COLORS.green} />
-              Mensagem simulada enviada para <b style={{ color: COLORS.text }}>{c.consultor.nome}</b> ({c.consultor.whatsapp})
+            <div style={{ display: "flex", alignItems: "flex-start", gap: 6, fontSize: 11, color: COLORS.muted, marginBottom: 3, flexWrap: "wrap" }}>
+              <MessageCircle size={12} color={COLORS.green} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>Mensagem simulada enviada para o consultor:</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: COLORS.muted, marginBottom: 8, marginLeft: 18 }}>
+              <b style={{ color: COLORS.text }}>{c.consultor.nome}</b> · {c.consultor.whatsapp}
             </div>
             <WhatsAppBubble consultor={c.consultor} mensagem={buildMensagemConsultor(c, c.metrics)} compact />
           </div>
@@ -1024,8 +1027,9 @@ function DetailScreen({ client, globalTick, onBack, onExport, onEdit, onDelete }
           </div>
         </div>
         {isFinite(metrics.diasEstimados) && metrics.diasEstimados < FREQ_DIAS[client.frequencia] * 0.5 && (
-          <div style={{ display: "flex", alignItems: "center", gap: 5, background: COLORS.amberSoft, color: COLORS.amber, padding: "4px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 600 }}>
-            <AlertTriangle size={12} /> projeção atual ({metrics.diasEstimados.toFixed(1)}d) bem abaixo do padrão contratado ({FREQ_DIAS[client.frequencia]}d)
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 5, background: COLORS.amberSoft, color: COLORS.amber, padding: "4px 10px", borderRadius: 12, fontSize: 11.5, fontWeight: 600, flexWrap: "wrap" }}>
+            <AlertTriangle size={12} style={{ flexShrink: 0, marginTop: 2 }} />
+            <span>projeção atual ({metrics.diasEstimados.toFixed(1)}d) bem abaixo do padrão contratado ({FREQ_DIAS[client.frequencia]}d)</span>
           </div>
         )}
       </div>
@@ -1039,9 +1043,12 @@ function DetailScreen({ client, globalTick, onBack, onExport, onEdit, onDelete }
               <div style={{ fontSize: 11.5, color: COLORS.muted, marginTop: 2 }}>{metrics.motivoRevisao}</div>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: COLORS.text, marginBottom: 8 }}>
-            <MessageCircle size={13} color={COLORS.green} />
-            Mensagem simulada enviada para <b>{client.consultor.nome}</b> ({client.consultor.whatsapp}):
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 6, fontSize: 11.5, color: COLORS.text, marginBottom: 4, flexWrap: "wrap" }}>
+            <MessageCircle size={13} color={COLORS.green} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span>Mensagem simulada enviada para o consultor:</span>
+          </div>
+          <div style={{ fontSize: 12, color: COLORS.muted, marginBottom: 10, marginLeft: 19 }}>
+            <b style={{ color: COLORS.text }}>{client.consultor.nome}</b> · {client.consultor.whatsapp}
           </div>
           <WhatsAppBubble consultor={client.consultor} mensagem={buildMensagemConsultor(client, metrics)} />
         </div>

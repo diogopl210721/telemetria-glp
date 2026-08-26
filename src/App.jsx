@@ -1388,8 +1388,8 @@ export default function TelemetriaSimulador() {
       if (c.metrics.precisaRevisao && !notifiedRef.current.has(c.id)) {
         notifiedRef.current.add(c.id);
         const toastId = `${c.id}-${globalTick}`;
-        setToasts((prev) => [...prev, { toastId, client: c }].slice(-4));
-        setTimeout(() => setToasts((prev) => prev.filter((t) => t.toastId !== toastId)), 9000);
+        setToasts((prev) => [...prev, { toastId, client: c }].slice(-2));
+        setTimeout(() => setToasts((prev) => prev.filter((t) => t.toastId !== toastId)), 6000);
       }
     });
   }, [globalTick, clients]);
@@ -1544,15 +1544,18 @@ export default function TelemetriaSimulador() {
 
       <div style={{ position: "fixed", bottom: 16, right: 16, zIndex: 200, display: "flex", flexDirection: "column", gap: 10, maxWidth: 360 }}>
         {toasts.map((t) => (
-          <div key={t.toastId} className="tg-toast" style={{ background: COLORS.panel, border: `1px solid ${COLORS.green}55`, borderRadius: 12, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-              <MessageCircle size={14} color={COLORS.green} />
-              <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.green }}>Mensagem simulada enviada</span>
+          <div key={t.toastId} className="tg-toast" style={{ background: COLORS.panel, border: `1px solid ${COLORS.green}55`, borderRadius: 10, padding: "10px 12px", boxShadow: "0 8px 24px rgba(0,0,0,0.4)", display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <MessageCircle size={15} color={COLORS.green} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.text, marginBottom: 1 }}>{t.client.nome}</div>
+              <div style={{ fontSize: 11, color: COLORS.muted }}>
+                Crítico {t.client.metrics.criticoEpisodes}x · consultor <b style={{ color: COLORS.text }}>{t.client.consultor.nome}</b> avisado (simulado)
+              </div>
             </div>
-            <div style={{ fontSize: 11.5, color: COLORS.muted, marginBottom: 8 }}>
-              <b style={{ color: COLORS.text }}>{t.client.nome}</b> bateu Crítico {t.client.metrics.criticoEpisodes}x — consultor {t.client.consultor.nome} avisado.
-            </div>
-            <WhatsAppBubble consultor={t.client.consultor} mensagem={buildMensagemConsultor(t.client, t.client.metrics)} compact />
+            <button onClick={() => setToasts((prev) => prev.filter((x) => x.toastId !== t.toastId))}
+              style={{ background: "none", border: "none", color: COLORS.faint, cursor: "pointer", padding: 2, flexShrink: 0 }}>
+              <X size={14} />
+            </button>
           </div>
         ))}
       </div>

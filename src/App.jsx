@@ -6,7 +6,7 @@ import {
 import {
   Play, Pause, AlertTriangle, AlertOctagon, CheckCircle2, WifiOff,
   Truck, ChevronDown, ChevronRight, ChevronLeft, Radio, Gauge as GaugeIcon,
-  SkipForward, FileSpreadsheet, MapPin, Building2, Users, Fuel, Hash, TrendingDown, Activity, CalendarClock, Bell, Wrench, Pencil, Plus, Trash2, X,
+  SkipForward, FileSpreadsheet, MapPin, Building2, Users, Fuel, Hash, TrendingDown, Activity, CalendarClock, Bell, Wrench, Pencil, Plus, Trash2, X, MessageCircle, Check, CheckCheck,
 } from "lucide-react";
 import * as XLSX from "xlsx-js-style";
 
@@ -50,6 +50,29 @@ const BASES = [
   { id: "jandaia", nome: "Jandaia do Sul", gerente: "Marcelo", uf: "PR",
     cidades: ["Jandaia do Sul", "Apucarana", "Marialva", "Maringá"] },
 ];
+
+// Consultor responsável por cidade — nomes e números fictícios, só para demonstração
+const CONSULTORES_POR_CIDADE = {
+  "Curitiba": { nome: "Bruno Alencar", whatsapp: "+55 41 99123-4501" },
+  "Araucária": { nome: "Camila Ferreira", whatsapp: "+55 41 99123-4502" },
+  "Campo Largo": { nome: "Diego Martins", whatsapp: "+55 41 99123-4503" },
+  "São José dos Pinhais": { nome: "Fernanda Lopes", whatsapp: "+55 41 99123-4504" },
+  "Barueri": { nome: "Rafael Souza", whatsapp: "+55 11 98765-4501" },
+  "Santana de Parnaíba": { nome: "Juliana Costa", whatsapp: "+55 11 98765-4502" },
+  "Osasco": { nome: "Marcelo Ribeiro", whatsapp: "+55 11 98765-4503" },
+  "Cotia": { nome: "Patrícia Nunes", whatsapp: "+55 11 98765-4504" },
+  "Canoas": { nome: "Gustavo Bittencourt", whatsapp: "+55 51 99887-4501" },
+  "Porto Alegre": { nome: "Larissa Fagundes", whatsapp: "+55 51 99887-4502" },
+  "Novo Hamburgo": { nome: "Eduardo Klein", whatsapp: "+55 51 99887-4503" },
+  "Gravataí": { nome: "Renata Schmidt", whatsapp: "+55 51 99887-4504" },
+  "Jandaia do Sul": { nome: "Thiago Camargo", whatsapp: "+55 43 99654-4501" },
+  "Apucarana": { nome: "Aline Moreira", whatsapp: "+55 43 99654-4502" },
+  "Marialva": { nome: "Vinicius Prado", whatsapp: "+55 43 99654-4503" },
+  "Maringá": { nome: "Bianca Teixeira", whatsapp: "+55 43 99654-4504" },
+};
+function getConsultor(cidade) {
+  return CONSULTORES_POR_CIDADE[cidade] || { nome: "A definir", whatsapp: "—" };
+}
 
 const TIPOS = ["Mercado", "Padaria", "Restaurante", "Condomínio Residencial", "Indústria",
   "Hospital", "Posto de Combustíveis", "Hotel", "Lavanderia Industrial", "Churrascaria",
@@ -110,7 +133,7 @@ function generateClients() {
       for (let i = 0; i < 10; i++) {
         const behavior = BEHAVIOR_PATTERN[i];
         const numB190 = NUMB190_PATTERN[i];
-        const limiteAprendido = behavior === "mal_dimensionado" ? 50 : 30;
+        const limiteAprendido = behavior === "mal_dimensionado" ? 50 : [10, 15, 20, 25, 30, 35, 40, 45, 50][Math.floor(rng() * 9)];
         const FREQ_CURTAS = ["semanal", "15dias", "21dias"];
         const frequencia = behavior === "recem_abastecido"
           ? FREQ_CURTAS[Math.floor(rng() * FREQ_CURTAS.length)]
@@ -166,6 +189,7 @@ function generateClients() {
           nome, codigo, baseId: base.id, baseNome: base.nome, gerente: base.gerente,
           cidade, uf: base.uf, endereco: `${rua}, ${numero} - ${bairro} - ${cidade}/${base.uf}`,
           numB190, capacidadeKg, seedAbastecimento, frequencia, diaSemana,
+          consultor: getConsultor(cidade),
           config: cfg, history,
         });
         idx++;
@@ -274,9 +298,9 @@ function computeMetrics(client, globalTick) {
     if (isCritico && !wasCritico) criticoEpisodes++;
   }
   const abastecimentosCount = resupplyEvents.length;
-  const precisaRevisao = criticoEpisodes >= 4 && abastecimentosCount >= 3;
+  const precisaRevisao = criticoEpisodes >= 3;
   const motivoRevisao = precisaRevisao
-    ? `Já atingiu Crítico ${criticoEpisodes}x nas últimas ${abastecimentosCount} rotas — possível dimensionamento errado, tancagem baixa ou aumento de equipamentos/consumo.`
+    ? `Já atingiu Crítico ${criticoEpisodes}x — possível dimensionamento errado, tancagem baixa ou aumento de equipamentos/consumo.`
     : null;
 
   return { nivelAtual: last.nivel, lastTick: last.tick, semSinal, ticksSinceSignal, recentRate,
@@ -403,6 +427,8 @@ function GlobalStyle() {
       @keyframes tgPulse { 0%{opacity:1; transform:scale(1);} 100%{opacity:0; transform:scale(2.4);} }
       @keyframes tgFadeIn { 0%{opacity:0; transform:translateY(-2px);} 100%{opacity:1; transform:translateY(0);} }
       .tg-ping { animation: tgFadeIn .5s ease-out; }
+      @keyframes tgSlideIn { 0%{opacity:0; transform:translateX(20px);} 100%{opacity:1; transform:translateX(0);} }
+      .tg-toast { animation: tgSlideIn .35s ease-out; }
       .tg-livedot { position:relative; width:9px; height:9px; border-radius:50%; background:${COLORS.green}; }
       .tg-livedot::after { content:''; position:absolute; inset:0; border-radius:50%; background:${COLORS.green}; animation: tgPulse 1.4s ease-out infinite; }
       input[type=range].tg-slider { accent-color:${COLORS.blue}; }
@@ -424,6 +450,36 @@ function GlobalStyle() {
 /* ---------------------------------------------------------------------
    MODAL DE FORMULÁRIO GENÉRICO (usado por base/cidade/cliente)
 --------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------
+   SIMULAÇÃO DE MENSAGEM PRO CONSULTOR (visual, não envia nada de verdade)
+--------------------------------------------------------------------- */
+function buildMensagemConsultor(client, metrics) {
+  return `⚠️ Alerta Telemetria GLP\nCliente: ${client.nome} (${client.cidade})\nJá atingiu *Crítico ${metrics.criticoEpisodes}x*.\nLimite de risco: ${client.config.limiteAprendido}%\nPossível causa: dimensionamento, tancagem baixa ou aumento de consumo.\nFavor verificar.`;
+}
+
+function WhatsAppBubble({ consultor, mensagem, compact }) {
+  const initials = consultor.nome.split(" ").map((p) => p[0]).slice(0, 2).join("");
+  return (
+    <div style={{ background: "#0B141A", borderRadius: 12, overflow: "hidden", border: "1px solid #1F2C34", maxWidth: compact ? 340 : 420 }}>
+      <div style={{ background: "#1F2C34", padding: "8px 12px", display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ width: 26, height: 26, borderRadius: "50%", background: "#2A9D8F", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, flexShrink: 0 }}>{initials}</div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ color: "#E9EDEF", fontSize: 12.5, fontWeight: 600 }}>{consultor.nome}</div>
+          <div style={{ color: "#8696A0", fontSize: 10.5 }}>{consultor.whatsapp}</div>
+        </div>
+      </div>
+      <div style={{ padding: "10px 12px", background: "#0B141A" }}>
+        <div style={{ background: "#005C4B", color: "#E9EDEF", borderRadius: "8px 8px 2px 8px", padding: "8px 10px", fontSize: 11.5, whiteSpace: "pre-line", lineHeight: 1.45, marginLeft: "auto", maxWidth: "92%" }}>
+          {mensagem}
+          <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 3, marginTop: 4, color: "#8696A0", fontSize: 9.5 }}>
+            simulado <CheckCheck size={12} color="#53BDEB" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FormModal({ title, fields, initial, onSave, onCancel, onDelete, deleteLabel }) {
   const [values, setValues] = useState(initial);
   const set = (key, v) => setValues((prev) => ({ ...prev, [key]: v }));
@@ -890,7 +946,12 @@ function AlertsScreen({ enrichedAll, onOpenClient, onBack, ...topBarProps }) {
               </div>
               <ChevronRight size={16} color={COLORS.muted} />
             </div>
-            <div style={{ fontSize: 11.5, color: COLORS.purple, marginTop: 6 }}>{c.metrics.motivoRevisao}</div>
+            <div style={{ fontSize: 11.5, color: COLORS.purple, marginTop: 6, marginBottom: 10 }}>{c.metrics.motivoRevisao}</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: COLORS.muted, marginBottom: 6 }}>
+              <MessageCircle size={12} color={COLORS.green} />
+              Mensagem simulada enviada para <b style={{ color: COLORS.text }}>{c.consultor.nome}</b> ({c.consultor.whatsapp})
+            </div>
+            <WhatsAppBubble consultor={c.consultor} mensagem={buildMensagemConsultor(c, c.metrics)} compact />
           </div>
         ))}
       </div>
@@ -940,6 +1001,7 @@ function DetailScreen({ client, globalTick, onBack, onExport, onEdit, onDelete }
         <span style={{ fontFamily: "var(--font-mono)" }}>Cod: {client.codigo}</span>
         <span>Cidade: <b style={{ color: COLORS.text }}>{client.cidade}</b></span>
         <span>Base {client.baseNome} · Gerente {client.gerente}</span>
+        <span>Consultor: <b style={{ color: COLORS.text }}>{client.consultor.nome}</b> ({client.consultor.whatsapp})</span>
       </div>
       <div style={{ fontSize: 12, color: COLORS.faint, marginBottom: 14, display: "flex", alignItems: "center", gap: 4 }}>
         <MapPin size={12} /> {client.endereco}
@@ -969,12 +1031,19 @@ function DetailScreen({ client, globalTick, onBack, onExport, onEdit, onDelete }
       </div>
 
       {metrics.precisaRevisao && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 8, background: COLORS.purpleSoft, border: `1px solid ${COLORS.purple}55`, borderRadius: 12, padding: "12px 16px", marginBottom: 14 }}>
-          <Wrench size={16} color={COLORS.purple} style={{ flexShrink: 0, marginTop: 1 }} />
-          <div>
-            <div style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.purple }}>Padrão fora do esperado — revisar com o consultor</div>
-            <div style={{ fontSize: 11.5, color: COLORS.muted, marginTop: 2 }}>{metrics.motivoRevisao}</div>
+        <div style={{ background: COLORS.purpleSoft, border: `1px solid ${COLORS.purple}55`, borderRadius: 12, padding: "14px 16px", marginBottom: 14 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 12 }}>
+            <Wrench size={16} color={COLORS.purple} style={{ flexShrink: 0, marginTop: 1 }} />
+            <div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: COLORS.purple }}>Padrão fora do esperado — revisar com o consultor</div>
+              <div style={{ fontSize: 11.5, color: COLORS.muted, marginTop: 2 }}>{metrics.motivoRevisao}</div>
+            </div>
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5, color: COLORS.text, marginBottom: 8 }}>
+            <MessageCircle size={13} color={COLORS.green} />
+            Mensagem simulada enviada para <b>{client.consultor.nome}</b> ({client.consultor.whatsapp}):
+          </div>
+          <WhatsAppBubble consultor={client.consultor} mensagem={buildMensagemConsultor(client, metrics)} />
         </div>
       )}
 
@@ -1150,7 +1219,7 @@ function makeNewClient({ baseId, baseNome, gerente, cidade, uf, nome, numB190, f
   return {
     id: `custom-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
     nome, codigo, baseId, baseNome, gerente, cidade, uf, endereco: endereco || `${cidade}/${uf}`,
-    numB190, capacidadeKg, seedAbastecimento, frequencia, diaSemana, config: cfg, history,
+    numB190, capacidadeKg, seedAbastecimento, frequencia, diaSemana, consultor: getConsultor(cidade), config: cfg, history,
   };
 }
 
@@ -1193,24 +1262,24 @@ function exportWorkbook(scopeClients, contextLines, filenameHint) {
   XLSX.utils.book_append_sheet(wb, wsCidades, "Cidades");
 
   // ABA 3 — CLIENTES (todos os dados e métricas de cada cliente)
-  const clientesHeaders = ["Cliente", "Código", "Cidade", "Base", "Gerente", "Status", "Nível atual (%)", "Limite aprendido (%)",
+  const clientesHeaders = ["Cliente", "Código", "Cidade", "Base", "Gerente", "Consultor", "WhatsApp consultor", "Status", "Nível atual (%)", "Limite aprendido (%)",
     "Taxa de consumo (%/dia)", "Taxa de consumo (kg/dia)", "Dias até o limite", "Próximo abastecimento", "Última leitura",
-    "Total de leituras", "Frequência", "Dia da rota", "B-190", "Capacidade (kg)", "Endereço", "Motivo"];
+    "Total de leituras", "Vezes em Crítico", "Frequência", "Dia da rota", "B-190", "Capacidade (kg)", "Endereço", "Motivo"];
   const clientesRows = scopeClients.map((c) => {
     const m = c.metrics, previsao = getPrevisao(c, m);
     const row = [
-      c.nome, c.codigo, c.cidade, c.baseNome, c.gerente, STATUS_META[m.status].label,
+      c.nome, c.codigo, c.cidade, c.baseNome, c.gerente, c.consultor.nome, c.consultor.whatsapp, STATUS_META[m.status].label,
       m.semSinal ? "—" : m.nivelAtual, c.config.limiteAprendido,
       +m.taxaDiaria.toFixed(2), +((m.taxaDiaria / 100) * c.capacidadeKg).toFixed(1),
       isFinite(m.diasEstimados) ? +m.diasEstimados.toFixed(1) : "—",
-      previsao.label, formatDate(tickToDate(m.lastTick)), c.history.length,
+      previsao.label, formatDate(tickToDate(m.lastTick)), c.history.length, m.criticoEpisodes,
       FREQ_LABELS[c.frequencia], c.diaSemana, c.numB190, c.capacidadeKg, c.endereco, m.motivo,
     ];
     row.__status = m.status;
     return row;
   });
   const wsClientes = buildStyledSheet(contextLines, clientesHeaders, clientesRows,
-    [28, 10, 16, 18, 14, 12, 13, 14, 15, 15, 13, 18, 14, 12, 14, 14, 8, 14, 34, 42], 5);
+    [28, 10, 16, 18, 14, 18, 18, 12, 13, 14, 15, 15, 13, 18, 14, 12, 12, 14, 14, 8, 14, 34, 42], 7);
   XLSX.utils.book_append_sheet(wb, wsClientes, "Clientes");
 
   // ABA 4 — LEITURAS (histórico bruto de cada leitura, de cada cliente)
@@ -1297,6 +1366,26 @@ export default function TelemetriaSimulador() {
   }, []);
 
   const enrichedAll = useMemo(() => clients.map((c) => ({ ...c, metrics: computeMetrics(c, globalTick) })), [clients, globalTick]);
+
+  const [toasts, setToasts] = useState([]);
+  const notifiedRef = useRef(new Set());
+  const initializedRef = useRef(false);
+  useEffect(() => {
+    if (!initializedRef.current) {
+      // não avisa sobre quem já nasceu marcado — só a partir daqui, em diante, ao vivo
+      enrichedAll.forEach((c) => { if (c.metrics.precisaRevisao) notifiedRef.current.add(c.id); });
+      initializedRef.current = true;
+      return;
+    }
+    enrichedAll.forEach((c) => {
+      if (c.metrics.precisaRevisao && !notifiedRef.current.has(c.id)) {
+        notifiedRef.current.add(c.id);
+        const toastId = `${c.id}-${globalTick}`;
+        setToasts((prev) => [...prev, { toastId, client: c }].slice(-4));
+        setTimeout(() => setToasts((prev) => prev.filter((t) => t.toastId !== toastId)), 9000);
+      }
+    });
+  }, [globalTick, clients]);
 
   const globalCounts = useMemo(() => {
     const b = { ok: 0, atencao: 0, critico: 0, falha: 0, aproximando: 0 };
@@ -1445,6 +1534,21 @@ export default function TelemetriaSimulador() {
           onDelete={() => { deleteCliente(modal.client.id); setModal(null); setView("list"); }}
           deleteLabel="Confirmar exclusão" />
       )}
+
+      <div style={{ position: "fixed", bottom: 16, right: 16, zIndex: 200, display: "flex", flexDirection: "column", gap: 10, maxWidth: 360 }}>
+        {toasts.map((t) => (
+          <div key={t.toastId} className="tg-toast" style={{ background: COLORS.panel, border: `1px solid ${COLORS.green}55`, borderRadius: 12, padding: 12, boxShadow: "0 8px 24px rgba(0,0,0,0.4)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+              <MessageCircle size={14} color={COLORS.green} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: COLORS.green }}>Mensagem simulada enviada</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: COLORS.muted, marginBottom: 8 }}>
+              <b style={{ color: COLORS.text }}>{t.client.nome}</b> bateu Crítico {t.client.metrics.criticoEpisodes}x — consultor {t.client.consultor.nome} avisado.
+            </div>
+            <WhatsAppBubble consultor={t.client.consultor} mensagem={buildMensagemConsultor(t.client, t.client.metrics)} compact />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

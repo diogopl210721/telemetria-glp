@@ -115,7 +115,7 @@ function genSeed(cfg, rng) {
     const freezeVal = pts[n - cfg.freezeLastN - 1].nivel;
     for (let i = n - cfg.freezeLastN; i < n; i++) pts[i].nivel = freezeVal + (rng() - 0.5) * 0.25;
   }
-  return pts.map((p) => ({ tick: p.tick, nivel: +Math.max(2, Math.min(98, p.nivel)).toFixed(1) }));
+  return pts.map((p) => ({ tick: p.tick, nivel: +Math.max(2, Math.min(82, p.nivel)).toFixed(1) }));
 }
 
 function genSeedSawtooth(cfg, rng) {
@@ -327,12 +327,27 @@ function buildChartData(client, metrics) {
 function getPrevisao(client, metrics) {
   if (metrics.semSinal) return { label: "indisponível", sub: "sem leitura recente" };
   if (metrics.nivelAtual <= client.config.limiteAprendido) return { label: "hoje", sub: formatDate(TODAY) };
+
+  // data fixa: último abastecimento (real, registrado) + frequência contratada — não se mexe sozinha a cada leitura
+  const abast = getAbastecimento(client, metrics);
+  const cicloDias = FREQ_DIAS[client.frequencia];
+  const previsaoFixa = new Date(abast.dataObj);
+  previsaoFixa.setDate(previsaoFixa.getDate() + cicloDias);
+
+  // só antecipa se o consumo real de agora apontar uma necessidade genuinamente mais cedo (não é ruído de uma leitura)
+  let previsaoFinal = previsaoFixa, antecipado = false;
   if (isFinite(metrics.diasEstimados)) {
-    const dias = Math.ceil(metrics.diasEstimados);
-    const d = new Date(TODAY); d.setDate(d.getDate() + dias);
-    return { label: formatDate(d), sub: dias === 0 ? "hoje" : `em ${dias} dia(s)` };
+    const previsaoReal = new Date(TODAY);
+    previsaoReal.setDate(previsaoReal.getDate() + Math.ceil(metrics.diasEstimados));
+    if (previsaoReal.getTime() < previsaoFixa.getTime() - 86400000) { // pelo menos 1 dia de folga, pra não flutuar por ruído
+      previsaoFinal = previsaoReal;
+      antecipado = true;
+    }
   }
-  return { label: "sem previsão", sub: "consumo estável demais pra projetar" };
+
+  const diasRestantes = Math.round((previsaoFinal - TODAY) / 86400000);
+  if (diasRestantes <= 0) return { label: "hoje", sub: formatDate(TODAY), antecipado };
+  return { label: formatDate(previsaoFinal), sub: antecipado ? `antecipado — em ${diasRestantes} dia(s)` : `em ${diasRestantes} dia(s)`, antecipado };
 }
 
 function getAbastecimento(client, metrics) {
@@ -340,12 +355,12 @@ function getAbastecimento(client, metrics) {
     const idx = metrics.resupplyEvents[metrics.resupplyEvents.length - 1];
     const antesPct = client.history[idx - 1].nivel, depoisPct = client.history[idx].nivel;
     const d = tickToDate(client.history[idx].tick);
-    return { quando: formatTickLabel(client.history[idx].tick), dataSimples: formatDate(d), antesPct, depoisPct, detectadoAoVivo: true };
+    return { quando: formatTickLabel(client.history[idx].tick), dataSimples: formatDate(d), dataObj: d, antesPct, depoisPct, detectadoAoVivo: true };
   }
   const s = client.seedAbastecimento;
   const d = new Date(TODAY);
   d.setDate(d.getDate() - s.diasAtras);
-  return { quando: `${formatDate(d)} (há ${s.diasAtras} dias)`, dataSimples: formatDate(d), antesPct: s.antesPct, depoisPct: s.depoisPct, detectadoAoVivo: false };
+  return { quando: `${formatDate(d)} (há ${s.diasAtras} dias)`, dataSimples: formatDate(d), dataObj: d, antesPct: s.antesPct, depoisPct: s.depoisPct, detectadoAoVivo: false };
 }
 
 const STATUS_META = {
@@ -1107,6 +1122,9 @@ function DetailScreen({ client, globalTick, onBack, onExport, onEdit, onDelete }
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <CalendarClock size={16} color={meta.color} />
               <span style={{ fontSize: 12.5, color: COLORS.muted }}>Próximo abastecimento previsto</span>
+              {previsao.antecipado && (
+                <span style={{ fontSize: 10, fontWeight: 700, color: COLORS.amber, background: COLORS.amberSoft, padding: "2px 7px", borderRadius: 10 }}>ANTECIPADO</span>
+              )}
             </div>
             <div style={{ textAlign: "right" }}>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 700, color: COLORS.text }}>{previsao.label}</div>

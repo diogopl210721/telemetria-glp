@@ -324,6 +324,20 @@ function buildChartData(client, metrics) {
   return data;
 }
 
+// Taxa de consumo estável: média só dos intervalos em que o nível realmente caiu,
+// ignorando os saltos de abastecimento, olhando várias leituras (não só a última).
+// Isso evita que uma janela de 1-2 leituras (que pode sair um número absurdo por acaso) decida a previsão.
+function taxaEstavelDiaria(client) {
+  const hist = client.history.slice(-16);
+  let somaQueda = 0, contagem = 0;
+  for (let i = 1; i < hist.length; i++) {
+    const delta = hist[i - 1].nivel - hist[i].nivel;
+    if (delta > 0) { somaQueda += delta; contagem++; }
+  }
+  if (contagem === 0) return client.config.baseRatePerTick * TICKS_PER_DAY;
+  return (somaQueda / contagem) * TICKS_PER_DAY;
+}
+
 function getPrevisao(client, metrics) {
   if (metrics.semSinal) return { label: "indisponível", sub: "sem leitura recente" };
   if (metrics.nivelAtual <= client.config.limiteAprendido) return { label: "hoje", sub: formatDate(TODAY) };
@@ -334,12 +348,17 @@ function getPrevisao(client, metrics) {
   const previsaoFixa = new Date(abast.dataObj);
   previsaoFixa.setDate(previsaoFixa.getDate() + cicloDias);
 
-  // só antecipa se o consumo real de agora apontar uma necessidade genuinamente mais cedo (não é ruído de uma leitura)
+  // só antecipa se o consumo real (média estável, várias leituras) for MUITO mais rápido que o contratado.
+  // o corte é relativo (metade do prazo que ainda falta no ciclo), então funciona igual pra semanal ou trimestral.
   let previsaoFinal = previsaoFixa, antecipado = false;
-  if (isFinite(metrics.diasEstimados)) {
-    const previsaoReal = new Date(TODAY);
-    previsaoReal.setDate(previsaoReal.getDate() + Math.ceil(metrics.diasEstimados));
-    if (previsaoReal.getTime() < previsaoFixa.getTime() - 86400000) { // pelo menos 1 dia de folga, pra não flutuar por ruído
+  const diasRestantesFixo = Math.round((previsaoFixa - TODAY) / 86400000);
+  const taxaDiariaEstavel = taxaEstavelDiaria(client);
+  const diasEstaveis = taxaDiariaEstavel > 0.01 ? (metrics.nivelAtual - client.config.limiteAprendido) / taxaDiariaEstavel : Infinity;
+  if (isFinite(diasEstaveis) && client.history.length >= 6) {
+    const limiar = Math.max(1, diasRestantesFixo * 0.5);
+    if (diasEstaveis < limiar) {
+      const previsaoReal = new Date(TODAY);
+      previsaoReal.setDate(previsaoReal.getDate() + Math.max(1, Math.ceil(diasEstaveis)));
       previsaoFinal = previsaoReal;
       antecipado = true;
     }
